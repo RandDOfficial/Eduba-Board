@@ -2,10 +2,6 @@ name: Build and Push Docker Image
 
 on:
   workflow_dispatch: # Enables manual execution button in GitHub Actions tab
-  push:
-    branches:
-      - main
-      - master
 
 jobs:
   build-and-push:
