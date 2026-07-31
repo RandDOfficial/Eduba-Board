@@ -12,6 +12,9 @@ COPY modules ./modules
 COPY public ./public
 COPY cli.js index.js install.js ./
 
+# Create data and logs directories
+RUN mkdir -p /app/data /app/logs
+
 # Expose port 3000
 EXPOSE 3000
 

@@ -1,8 +1,14 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 
-const dbPath = path.join(__dirname, '..', 'sqlite.db');
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'sqlite.db');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
 const sqlite = new Database(dbPath);
 
 sqlite.pragma('foreign_keys = ON');
