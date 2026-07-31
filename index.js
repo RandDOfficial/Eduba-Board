@@ -1,4 +1,10 @@
-require('elenora').connect(console, { filename: 'logs/app.log', maxSize: 1024 * 1024, backupCount: 3, continueFromLast: true });
+const fs = require('fs');
+const path = require('path');
+const logDir = process.env.LOG_DIR || (process.env.DB_PATH ? path.join(path.dirname(process.env.DB_PATH), 'logs') : path.join(__dirname, 'logs'));
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
+require('elenora').connect(console, { filename: path.join(logDir, 'app.log'), maxSize: 1024 * 1024, backupCount: 3, continueFromLast: true });
 const fastify = require('fastify')({ bodyLimit: 100 * 1024 * 1024 });
 
 fastify.register(require('@fastify/cookie'), { secret: 'eduba-super-secret' });
