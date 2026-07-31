@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  eduba:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eduba:latest
+    container_name: eduba-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./sqlite.db:/app/sqlite.db
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=production

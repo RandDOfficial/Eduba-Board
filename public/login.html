@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Eduba Board - Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Eduba Board - Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0a0a0a; color: #e4e4e7; font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1a1a1a; padding: 32px; border-radius: 12px; border: 1px solid #27272a; width: 320px; }
+    h2 { margin: 0 0 24px; font-weight: 600; text-align: center; }
+    input { width: 100%; box-sizing: border-box; background: #0a0a0a; border: 1px solid #27272a; color: white; padding: 10px; border-radius: 6px; margin-bottom: 16px; }
+    button { width: 100%; padding: 10px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 12px; }
+    .toggle { text-align: center; color: #71717a; font-size: 13px; cursor: pointer; }
+    #msg { color: #ef4444; font-size: 13px; text-align: center; margin-bottom: 10px; height: 16px; }
+    @media (max-width: 480px) {
+      .card { width: 90vw; padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 id="title">Giriş Yap</h2>
+    <div id="msg"></div>
+    <input type="text" id="name" placeholder="Kullanıcı adı" autocomplete="username" minlength="2" maxlength="40" hidden>
+    <input type="email" id="email" placeholder="E-posta" required>
+    <input type="password" id="password" placeholder="Şifre" required>
+    <button id="submitBtn">Giriş</button>
+    <div class="toggle" id="toggleBtn">Hesabın yok mu? Kayıt ol</div>
+  </div>
+  <script>
+    let isLogin = true;
+    const msg = document.getElementById('msg');
+    document.getElementById('toggleBtn').onclick = () => {
+      isLogin = !isLogin;
+      document.getElementById('title').innerText = isLogin ? 'Giriş Yap' : 'Kayıt Ol';
+      document.getElementById('submitBtn').innerText = isLogin ? 'Giriş' : 'Kayıt Ol';
+      document.getElementById('toggleBtn').innerText = isLogin ? 'Hesabın yok mu? Kayıt ol' : 'Zaten hesabın var mı? Giriş yap';
+      document.getElementById('name').hidden = isLogin;
+      msg.innerText = '';
+    };
+
+    document.getElementById('submitBtn').onclick = async () => {
+      const emailInput = document.getElementById('email');
+      const passwordInput = document.getElementById('password');
+      const nameInput = document.getElementById('name');
+
+      if (!isLogin && !nameInput.checkValidity()) {
+        msg.innerText = 'Kullanıcı adı 2-40 karakter arasında olmalıdır.';
+        return;
+      }
+
+      if (!emailInput.checkValidity()) {
+        msg.innerText = 'Lütfen geçerli bir e-posta adresi girin.';
+        return;
+      }
+      if (!passwordInput.value) {
+        msg.innerText = 'Lütfen şifre girin.';
+        return;
+      }
+
+      const email = emailInput.value;
+      const password = passwordInput.value;
+      const name = nameInput.value.trim();
+
+      const res = await fetch(isLogin ? '/api/auth/login' : '/api/auth/register', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(isLogin ? { email, password } : { email, password, name })
+      });
+      const data = await res.json();
+
+      if (!res.ok) msg.innerText = data.error || 'Bir hata oluştu';
+      else {
+        if (!isLogin) {
+          msg.style.color = '#22c55e';
+          msg.innerText = 'Kayıt başarılı, giriş yapılıyor...';
+          setTimeout(() => { document.getElementById('toggleBtn').click(); document.getElementById('submitBtn').click(); }, 1000);
+        } else {
+          window.location.href = '/dashboard.html';
+        }
+      }
+    };
+  </script>
+</body>
+</html>
