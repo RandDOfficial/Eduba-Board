@@ -10,6 +10,3 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-    environment:
-      - NODE_ENV=production
-      - DB_PATH=/app/data/sqlite.db
