@@ -3,7 +3,11 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 
-let dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'sqlite.db');
+const defaultPath = process.env.NODE_ENV === 'production'
+  ? path.join(__dirname, '..', 'data', 'sqlite.db')
+  : path.join(__dirname, '..', 'sqlite.db');
+
+let dbPath = process.env.DB_PATH || defaultPath;
 
 // Handle edge case where Docker mounted a directory instead of a file
 if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {

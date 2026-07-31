@@ -22,6 +22,10 @@ module.exports = function(fastify) {
   fastify.decorate('requireUser', requireUser);
 
   fastify.post('/api/auth/register', async (request, reply) => {
+    const allowRegistration = process.env.ALLOW_REGISTRATION !== 'false';
+    if (!allowRegistration) {
+      return reply.code(403).send({ error: 'Yeni kullanıcı kayıtları yönetici tarafından kapatılmıştır.' });
+    }
     const { email, password, name } = request.body;
     if (!isValidName(name)) return reply.code(400).send({ error: 'Kullanıcı adı 2-40 karakter arasında olmalıdır.' });
     if (!email || !password || password.length < 6) {

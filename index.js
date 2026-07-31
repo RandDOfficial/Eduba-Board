@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const logDir = process.env.LOG_DIR || (process.env.DB_PATH ? path.join(path.dirname(process.env.DB_PATH), 'logs') : path.join(__dirname, 'logs'));
+const defaultLogDir = process.env.NODE_ENV === 'production' ? path.join(__dirname, 'data', 'logs') : path.join(__dirname, 'logs');
+const logDir = process.env.LOG_DIR || (process.env.DB_PATH ? path.join(path.dirname(process.env.DB_PATH), 'logs') : defaultLogDir);
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
