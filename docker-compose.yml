@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   eduba:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: eduba:latest
+    image: ghcr.io/randdofficial/eduba-board:latest
     container_name: eduba-app
     restart: unless-stopped
     ports:
