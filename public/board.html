@@ -499,7 +499,7 @@
         <button id="btnSummon" onclick="summonAll()" title="Herkesi Yanıma Çağır" class="action-btn btn-amber">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
         </button>
-        <button id="btnUsers" onclick="const o = document.getElementById('usersModalOverlay'); o.style.display = (o.style.display === 'flex') ? 'none' : 'flex'; o.style.alignItems='center'; o.style.justifyContent='center';" title="Kullanıcılar" class="action-btn btn-blue">
+        <button id="btnUsers" onclick="const o = document.getElementById('usersModalOverlay'); const m = document.getElementById('usersModal'); if(m) m.style.display=''; o.style.display = (o.style.display === 'flex') ? 'none' : 'flex'; o.style.alignItems='center'; o.style.justifyContent='center';" title="Kullanıcılar" class="action-btn btn-blue">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 1 0 7.75"/></svg>
         </button>
         <button id="btnSettings" onclick="document.getElementById('settingsModal').style.display='flex'" title="Ayarlar" class="action-btn">
@@ -3467,8 +3467,10 @@
                 if (typeof window.centerViewOn === 'function') {
                     window.centerViewOn(state.pos.x, state.pos.y);
                 }
+                const overlay = document.getElementById('usersModalOverlay');
+                if (overlay) overlay.style.display = 'none';
                 const modal = document.getElementById('usersModal');
-                if (modal) modal.style.display = 'none';
+                if (modal) modal.style.display = '';
             }
         };
 
