@@ -27,9 +27,12 @@
         }
 
         #board { position: absolute; transform-origin: 0 0; width: 1px; height: 1px; overflow: visible; }
-        #svgLayer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; z-index: 2; overflow: visible;}
+        #svgLayer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; z-index: 12; overflow: visible;}
         #tempSvgLayer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; z-index: 99999; overflow: visible;}
         #remoteSvgLayer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; z-index: 99998; overflow: visible;}
+
+        .shape-text { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; border: none; outline: none; word-wrap: break-word; white-space: pre-wrap; line-height: 1.4; user-select: none; }
+        .shape-text[contenteditable="true"] { user-select: text; cursor: text; outline: none; }
 
         #selectionBox {
             position: absolute; border: 2px dashed #3b82f6;
@@ -158,7 +161,11 @@
 
         line.selected, path.selected {
             stroke: #007aff !important;
-            filter: drop-shadow(0px 0px 5px rgba(0, 122, 255, 0.8));
+            stroke-width: 6px !important;
+            filter: drop-shadow(0px 0px 4px rgba(0, 122, 255, 0.7));
+            outline: none !important;
+        }
+        g.selected, svg.selected {
             outline: none !important;
         }
 
@@ -185,11 +192,11 @@
         .port-right { top: calc(50% - 6px); right: -6px; }
 
         .frame-item { position: absolute; background: rgba(200, 200, 200, 0.2); border: 2px solid #bbb; z-index: 5; min-width: 200px; min-height: 200px; cursor: pointer; transition: background 0.3s, outline 0.1s; }
-        .frame-title { position: absolute; top: -25px; left: -2px; font-size: 18px; font-weight: bold; color: #666; cursor: text; background: transparent; border: none; outline: none; white-space: nowrap; user-select: none; }
+        .frame-title { position: absolute; top: -32px; left: -2px; font-size: 24px; font-weight: bold; color: #666; cursor: text; background: transparent; border: none; outline: none; white-space: nowrap; user-select: none; }
         .frame-title[contenteditable="true"] { border: 1px dashed #007aff; background: white; user-select: text; cursor: text;}
 
-        .shape-item { position: absolute; background: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); cursor: move; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 15px; text-align: center; border: 3px solid #333; transition: outline 0.1s; min-width: 50px; min-height: 50px; user-select: none; }
-        .shape-item[contenteditable="true"] { user-select: text; cursor: text; }
+        .shape-item { position: absolute; background: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); cursor: move; z-index: 10; display: grid !important; place-items: center !important; place-content: center !important; padding: 15px; text-align: center; border: 3px solid #333; transition: outline 0.1s; min-width: 50px; min-height: 50px; user-select: none; box-sizing: border-box; }
+        .shape-item[contenteditable="true"] { user-select: text; cursor: text; display: grid !important; place-items: center !important; place-content: center !important; text-align: center; }
         .shape-circle { border-radius: 50%; }
 
         .media-item { position: absolute; background: #1e1e2d; border: 2px dashed rgba(255,255,255,0.2); border-radius: 8px; cursor: move; z-index: 15; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,0.25); transition: outline 0.1s; overflow: hidden; }
@@ -620,6 +627,7 @@
         window.connections = [];
         let isPortDrawing = false;
         let activeSourceNode = null; 
+        let activeSourcePort = 'right';
         let portStartX = 0, portStartY = 0; 
 
         let isMultiSelecting = false;
@@ -836,6 +844,10 @@
         function setMode(newMode) {
             mode = newMode;
             document.body.className = 'mode-' + mode;
+
+            if (mode !== 'pan') {
+                clearSelection();
+            }
 
             if (document.getElementById('btnPan')) document.getElementById('btnPan').classList.toggle('active', mode === 'pan');
             if (document.getElementById('btnText')) document.getElementById('btnText').classList.toggle('active', mode === 'text');
@@ -1302,7 +1314,8 @@
                 
                 let dx = pos.x - lineStartX; 
                 let dy = pos.y - lineStartY;
-                if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return; 
+                const dist = Math.hypot(dx, dy);
+                if (dist < 30) return; // Enforce minimum length of 30px to prevent unselectable tiny line stubs
 
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 line.id = generateId();
@@ -1320,13 +1333,28 @@
                 line.style.pointerEvents = 'stroke'; 
                 line.style.cursor = 'pointer';
                 
-                line.addEventListener('mousedown', (ev) => { 
+                // Add a transparent wide hit area around the line for super easy clicking
+                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hitLine.setAttribute('x1', lineStartX); 
+                hitLine.setAttribute('y1', lineStartY);
+                hitLine.setAttribute('x2', pos.x); 
+                hitLine.setAttribute('y2', pos.y);
+                hitLine.setAttribute('stroke', 'transparent'); 
+                hitLine.setAttribute('stroke-width', '12');
+                hitLine.style.pointerEvents = 'stroke';
+                hitLine.style.cursor = 'pointer';
+
+                const handleLineSelect = (ev) => { 
                     if (mode !== 'pan' || ev.button !== 0) return; 
                     ev.stopPropagation(); 
                     if (!selectedElements.includes(line)) selectElement(line); 
-                });
+                };
+
+                line.addEventListener('mousedown', handleLineSelect);
+                hitLine.addEventListener('mousedown', handleLineSelect);
                 
                 line._connectionObj = { el: line };
+                drawingsGroup.appendChild(hitLine);
                 drawingsGroup.appendChild(line);
                 if (window.awareness) window.awareness.setLocalStateField('linePreview', null);
                 if (window.sendAddLine) window.sendAddLine(line);
@@ -1354,10 +1382,28 @@
                     }
                 }
                 
+                const getClosestPortOnNode = (targetEl, mouseX, mouseY) => {
+                    const rect = targetEl.getBoundingClientRect();
+                    const ports = [
+                        { name: 'top', x: rect.left + rect.width / 2, y: rect.top },
+                        { name: 'bottom', x: rect.left + rect.width / 2, y: rect.bottom },
+                        { name: 'left', x: rect.left, y: rect.top + rect.height / 2 },
+                        { name: 'right', x: rect.right, y: rect.top + rect.height / 2 }
+                    ];
+                    let closest = ports[0];
+                    let minDist = Infinity;
+                    ports.forEach(p => {
+                        const d = Math.hypot(p.x - mouseX, p.y - mouseY);
+                        if (d < minDist) { minDist = d; closest = p; }
+                    });
+                    return closest.name;
+                };
+
                 if (targetNode && targetNode !== activeSourceNode) {
                     // Connected to an existing node on board!
                     if (!window.connections) window.connections = [];
-                    window.connections.push({ source: activeSourceNode, target: targetNode, color: globalColor, type: defaultConnectionType });
+                    const tgtPort = getClosestPortOnNode(targetNode, e.clientX, e.clientY);
+                    window.connections.push({ source: activeSourceNode, sourcePort: activeSourcePort || 'right', target: targetNode, targetPort: tgtPort, color: globalColor, type: defaultConnectionType });
                     renderConnections();
                     if (window.sendUpdateConnections) window.sendUpdateConnections();
                 } else if (!isInsideSource && targetNode !== activeSourceNode && (Math.abs(dx) >= 40 || Math.abs(dy) >= 40)) {
@@ -1374,7 +1420,9 @@
                     clone.querySelectorAll('.port, .resize-handle, .item-star-btn').forEach(el => el.remove());
                     
                     if (clone.classList.contains('shape-item') || clone.classList.contains('text-item')) {
-                        clone.innerText = ""; 
+                        let txt = clone.querySelector('.shape-text');
+                        if (txt) txt.innerText = "";
+                        else clone.innerText = "";
                     } else if (clone.classList.contains('frame-item')) { 
                         let t = clone.querySelector('.frame-title'); 
                         if(t) t.innerText = "Yeni Frame"; 
@@ -1402,7 +1450,13 @@
                     undoStack.push({ type: 'dom', element: clone });
                     redoStack = [];
                     if (!window.connections) window.connections = [];
-                    window.connections.push({ source: activeSourceNode, target: clone, color: globalColor, type: defaultConnectionType });
+                    let tgtPort = 'left';
+                    if (activeSourcePort === 'right') tgtPort = 'left';
+                    else if (activeSourcePort === 'left') tgtPort = 'right';
+                    else if (activeSourcePort === 'top') tgtPort = 'bottom';
+                    else if (activeSourcePort === 'bottom') tgtPort = 'top';
+
+                    window.connections.push({ source: activeSourceNode, sourcePort: activeSourcePort || 'right', target: clone, targetPort: tgtPort, color: globalColor, type: defaultConnectionType });
                     renderConnections();
                     if (window.sendAddElement) window.sendAddElement(clone);
                     if (window.sendUpdateConnections) window.sendUpdateConnections();
@@ -1549,13 +1603,27 @@
 
         function startEditingText(element, forceEndPosition = false) {
             if (!element) return;
-            const alreadyFocused = element._isBeingEdited && document.activeElement === element;
-            element.contentEditable = "true";
-            element._isBeingEdited = true;
-            element.setAttribute('data-editing', 'true');
-            if (!alreadyFocused) element.focus();
+            
+            let targetEditable = element;
+            if (element.classList.contains('shape-item')) {
+                let textDiv = element.querySelector('.shape-text');
+                if (!textDiv) {
+                    textDiv = document.createElement('div');
+                    textDiv.className = 'shape-text';
+                    textDiv.innerText = element.innerText.trim();
+                    [...element.childNodes].forEach(n => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+                    element.appendChild(textDiv);
+                }
+                targetEditable = textDiv;
+            }
 
-            // If user is already actively focused on this element and clicked inside, preserve their click cursor position
+            const alreadyFocused = element._isBeingEdited && (document.activeElement === element || document.activeElement === targetEditable);
+            targetEditable.contentEditable = "true";
+            element._isBeingEdited = true;
+            targetEditable._isBeingEdited = true;
+            element.setAttribute('data-editing', 'true');
+            if (!alreadyFocused) targetEditable.focus();
+
             if (alreadyFocused && !forceEndPosition) return;
 
             try {
@@ -1563,7 +1631,7 @@
                 const range = document.createRange();
                 
                 let textNode = null;
-                for (let node of element.childNodes) {
+                for (let node of targetEditable.childNodes) {
                     if (node.nodeType === Node.TEXT_NODE) {
                         textNode = node;
                         break;
@@ -1572,7 +1640,7 @@
                 
                 if (!textNode) {
                     textNode = document.createTextNode("");
-                    element.insertBefore(textNode, element.firstChild);
+                    targetEditable.appendChild(textNode);
                 }
                 
                 range.setStart(textNode, textNode.length);
@@ -1584,17 +1652,19 @@
 
         // NESNE OLUŞTURMA VE ETKİLEŞİM FONKSİYONLARI
         function applyEditableBlur(element) { 
-            element.addEventListener('blur', () => { 
+            const handleBlur = () => { 
                 element.contentEditable = "false";
+                const textDiv = element.querySelector('.shape-text');
+                if (textDiv) textDiv.contentEditable = "false";
                 element._isBeingEdited = false;
                 element.removeAttribute('data-editing');
-                // Only remove if still in DOM, empty, AND enough time has passed (not just created)
                 if (element.innerText.trim() === '' && element.classList.contains('text-item') && element._allowDelete) {
                     const _id = element.id;
                     element.remove();
                     if (_id && window.sendDeleteElement) window.sendDeleteElement(_id);
                 }
-            }); 
+            };
+            element.addEventListener('blur', handleBlur, true); 
         }
 
         // FRAME İSİMLENDİRME DÜZELTMESİ (ÇİFT TIK İLE EDIT)
@@ -1683,10 +1753,22 @@
                     e.preventDefault(); 
                     isPortDrawing = true; 
                     activeSourceNode = element; 
+                    activeSourcePort = pos;
                     const rect = element.getBoundingClientRect(); 
                     const boardRect = board.getBoundingClientRect(); 
-                    portStartX = (rect.left + rect.width / 2 - boardRect.left) / scale; 
-                    portStartY = (rect.top + rect.height / 2 - boardRect.top) / scale; 
+                    if (pos === 'top') {
+                        portStartX = (rect.left + rect.width / 2 - boardRect.left) / scale;
+                        portStartY = (rect.top - boardRect.top) / scale;
+                    } else if (pos === 'bottom') {
+                        portStartX = (rect.left + rect.width / 2 - boardRect.left) / scale;
+                        portStartY = (rect.bottom - boardRect.top) / scale;
+                    } else if (pos === 'left') {
+                        portStartX = (rect.left - boardRect.left) / scale;
+                        portStartY = (rect.top + rect.height / 2 - boardRect.top) / scale;
+                    } else if (pos === 'right') {
+                        portStartX = (rect.right - boardRect.left) / scale;
+                        portStartY = (rect.top + rect.height / 2 - boardRect.top) / scale;
+                    }
                     tempLine.setAttribute('x1', portStartX); 
                     tempLine.setAttribute('y1', portStartY); 
                     tempLine.setAttribute('x2', portStartX); 
@@ -1713,10 +1795,10 @@
             title.className = 'frame-title'; 
             title.contentEditable = "true"; 
             title.innerText = "Yeni Frame"; 
-            frame.style.width = '600px'; 
-            frame.style.height = '400px'; 
-            frame.style.left = `${x - 300}px`; 
-            frame.style.top = `${y - 200}px`; 
+            frame.style.width = '850px'; 
+            frame.style.height = '550px'; 
+            frame.style.left = `${x - 425}px`; 
+            frame.style.top = `${y - 275}px`; 
             applyEditableBlur(title); 
             frame.appendChild(title); 
             addConnectionPorts(frame); 
@@ -1784,7 +1866,11 @@
             shape.id = generateId();
             shape.className = `shape-item shape-${type}`; 
             shape.contentEditable = "false"; 
-            shape.innerText = ""; 
+            const textDiv = document.createElement('div');
+            textDiv.className = 'shape-text';
+            textDiv.contentEditable = "false";
+            textDiv.innerText = "";
+            shape.appendChild(textDiv);
             let w = type === 'rect' ? 200 : 150; 
             let h = type === 'rect' ? 100 : 150; 
             shape.style.width = `${w}px`; 
@@ -1946,6 +2032,18 @@
             });
         }
 
+        function getPortPos(element, portName, boardRect, scale) {
+            if (!element) return { x: 0, y: 0 };
+            const rect = element.getBoundingClientRect();
+            let x = rect.left + rect.width / 2;
+            let y = rect.top + rect.height / 2;
+            if (portName === 'top') { x = rect.left + rect.width / 2; y = rect.top; }
+            else if (portName === 'bottom') { x = rect.left + rect.width / 2; y = rect.bottom; }
+            else if (portName === 'left') { x = rect.left; y = rect.top + rect.height / 2; }
+            else if (portName === 'right') { x = rect.right; y = rect.top + rect.height / 2; }
+            return { x: (x - boardRect.left) / scale, y: (y - boardRect.top) / scale };
+        }
+
         function renderConnections() {
             if (!window.connections) window.connections = [];
             const selectedConns = selectedElements
@@ -1955,55 +2053,70 @@
             window.connections = window.connections.filter(conn => conn && conn.source && conn.target && conn.source.parentNode && conn.target.parentNode); 
             connectionsGroup.innerHTML = ''; 
             
+            const boardRect = board.getBoundingClientRect(); 
+
             window.connections.forEach(conn => { 
-                const srcRect = conn.source.getBoundingClientRect(); 
-                const srcBoard = board.getBoundingClientRect(); 
-                const srcCX = (srcRect.left + srcRect.width / 2 - srcBoard.left) / scale; 
-                const srcCY = (srcRect.top + srcRect.height / 2 - srcBoard.top) / scale; 
-                const tgtRect = conn.target.getBoundingClientRect(); 
-                const tgtBoard = board.getBoundingClientRect(); 
+                if (!conn.sourcePort || !conn.targetPort) {
+                    const ports = ['top', 'bottom', 'left', 'right'];
+                    let minDist = Infinity;
+                    let bestSP = 'right', bestTP = 'left';
+                    ports.forEach(sp => {
+                        const p1 = getPortPos(conn.source, sp, boardRect, scale);
+                        ports.forEach(tp => {
+                            const p2 = getPortPos(conn.target, tp, boardRect, scale);
+                            const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                            if (d < minDist) { minDist = d; bestSP = sp; bestTP = tp; }
+                        });
+                    });
+                    if (!conn.sourcePort) conn.sourcePort = bestSP;
+                    if (!conn.targetPort) conn.targetPort = bestTP;
+                }
+
+                const srcPos = getPortPos(conn.source, conn.sourcePort, boardRect, scale);
+                const tgtPos = getPortPos(conn.target, conn.targetPort, boardRect, scale);
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 
-                const ports = [ 
-                    { x: (tgtRect.left + tgtRect.width / 2 - tgtBoard.left) / scale, y: (tgtRect.top - tgtBoard.top) / scale }, 
-                    { x: (tgtRect.left + tgtRect.width / 2 - tgtBoard.left) / scale, y: (tgtRect.bottom - tgtBoard.top) / scale }, 
-                    { x: (tgtRect.left - tgtBoard.left) / scale, y: (tgtRect.top + tgtRect.height / 2 - tgtBoard.top) / scale }, 
-                    { x: (tgtRect.right - tgtBoard.left) / scale, y: (tgtRect.top + tgtRect.height / 2 - tgtBoard.top) / scale } 
-                ]; 
-                
-                let closestPort = ports[0]; 
-                let minDist = Infinity; 
-                
-                ports.forEach(p => { 
-                    const dist = Math.hypot(p.x - srcCX, p.y - srcCY); 
-                    if (dist < minDist) { minDist = dist; closestPort = p; } 
-                }); 
-                
+                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hitLine.setAttribute('x1', srcPos.x);
+                hitLine.setAttribute('y1', srcPos.y);
+                hitLine.setAttribute('x2', tgtPos.x);
+                hitLine.setAttribute('y2', tgtPos.y);
+                hitLine.setAttribute('stroke', 'transparent');
+                hitLine.setAttribute('stroke-width', '12');
+                hitLine.style.pointerEvents = 'stroke';
+                hitLine.style.cursor = 'pointer';
+
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line'); 
-                line.setAttribute('x1', srcCX); 
-                line.setAttribute('y1', srcCY); 
-                line.setAttribute('x2', closestPort.x); 
-                line.setAttribute('y2', closestPort.y); 
+                line.setAttribute('x1', srcPos.x); 
+                line.setAttribute('y1', srcPos.y); 
+                line.setAttribute('x2', tgtPos.x); 
+                line.setAttribute('y2', tgtPos.y); 
                 line.setAttribute('stroke', conn.color || globalColor || '#ffffff'); 
                 line.setAttribute('stroke-width', '4'); 
-                
                 if (conn.type !== 'plain_line') line.setAttribute('marker-end', 'url(#arrowhead)'); 
+                line.style.pointerEvents = 'none';
                 
-                line.style.pointerEvents = 'stroke'; 
-                line.style.cursor = 'pointer'; 
-                line._connectionObj = conn; 
-                
+                g._connectionObj = conn;
+                line._connectionObj = conn;
+                hitLine._connectionObj = conn;
+
                 if (selectedConns.includes(conn)) { 
                     line.classList.add('selected'); 
                     selectedElements.push(line); 
                 } 
                 
-                line.addEventListener('mousedown', (e) => { 
-                    if(mode !== 'pan' || e.button !== 0) return; 
-                    e.stopPropagation(); 
-                    if (!selectedElements.includes(line)) selectElement(line); 
-                }); 
-                
-                connectionsGroup.appendChild(line); 
+                const handleConnSelect = (e) => {
+                    if (mode !== 'pan' || e.button !== 0) return;
+                    e.stopPropagation();
+                    if (!selectedElements.includes(line)) selectElement(line);
+                };
+
+                hitLine.addEventListener('mousedown', handleConnSelect);
+
+                g.appendChild(hitLine);
+                g.appendChild(line);
+                connectionsGroup.appendChild(g); 
             });
         }
 
@@ -2023,7 +2136,7 @@
                     const video = document.createElement('video'); 
                     video.src = event.target.result; 
                     video.controls = true;
-                    video.autoplay = true;
+                    video.autoplay = false;
                     video.loop = true;
                     video.muted = true;
                     video.playsInline = true;
@@ -2534,8 +2647,10 @@
                     const restoredVid = el.querySelector('video');
                     if (restoredVid) {
                         restoredVid.controls = true;
+                        restoredVid.autoplay = false;
                         restoredVid.muted = true;
                         restoredVid.playsInline = true;
+                        try { restoredVid.pause(); } catch(e) {}
                     }
                 });
                 
@@ -2957,8 +3072,10 @@
                     const syncedVid = el.querySelector('video');
                     if (syncedVid) {
                         syncedVid.controls = true;
+                        syncedVid.autoplay = false;
                         syncedVid.muted = true;
                         syncedVid.playsInline = true;
+                        try { syncedVid.pause(); } catch(e) {}
                     }
                     break;
                 }
