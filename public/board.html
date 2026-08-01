@@ -178,7 +178,7 @@
             border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
             display: none; cursor: crosshair; z-index: 100 !important;
         }
-        .shape-item:hover .port, .media-item:hover .port, .text-item:hover .port, .frame-item:hover .port, .drawing-item:hover .port { display: block; }
+        .shape-item:hover .port, .media-item:hover .port, .frame-item:hover .port, .drawing-item:hover .port { display: block; }
         .port-top { top: -6px; left: calc(50% - 6px); }
         .port-bottom { bottom: -6px; left: calc(50% - 6px); }
         .port-left { top: calc(50% - 6px); left: -6px; }
@@ -932,12 +932,11 @@
             e.preventDefault();
             stopMomentum();
 
-            if (e.ctrlKey) {
-                const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+            if (e.deltaY !== 0) {
+                const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
                 zoomByFactor(zoomFactor, e.clientX, e.clientY);
-            } else if (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) > 0) {
+            } else if (Math.abs(e.deltaX) > 0) {
                 panX -= e.deltaX;
-                panY -= e.deltaY;
                 updateTransform();
             }
         }, { passive: false });
@@ -1331,7 +1330,6 @@
                 drawingsGroup.appendChild(line);
                 if (window.awareness) window.awareness.setLocalStateField('linePreview', null);
                 if (window.sendAddLine) window.sendAddLine(line);
-                if (typeof setMode === 'function') setMode('pan');
             
             } else if (isPortDrawing) {
                 tempLine.style.display = 'none'; 
@@ -1465,7 +1463,7 @@
             if (dsWasBlock) drawShield.style.display = 'none';
             if (tempWasBlock) tempLine.style.display = 'none';
 
-            const el = document.elementFromPoint(clientX, clientY)?.closest('.shape-item, .media-item, .text-item, .frame-item, .drawing-item');
+            const el = document.elementFromPoint(clientX, clientY)?.closest('.shape-item, .media-item, .text-item, .drawing-item');
 
             if (dsWasBlock) drawShield.style.display = 'block';
             if (tempWasBlock) tempLine.style.display = 'block';
@@ -1632,15 +1630,29 @@
                         window.isUserInteracting = true;
                         const dx = (moveE.clientX - sX) / scale; 
                         const dy = (moveE.clientY - sY) / scale; 
+                        const minW = parseFloat(window.getComputedStyle(element).minWidth) || 20;
+                        const minH = parseFloat(window.getComputedStyle(element).minHeight) || 20;
                         let newW = sW, newH = sH, newL = sL, newT = sT; 
                         
-                        if (pos.includes('e')) newW = sW + dx; 
-                        if (pos.includes('w')) { newW = sW - dx; if (newW >= 20) newL = sL + dx; else newW = 20; } 
-                        if (pos.includes('s')) newH = sH + dy; 
-                        if (pos.includes('n')) { newH = sH - dy; if (newH >= 20) newT = sT + dy; else newH = 20; } 
+                        if (pos.includes('e')) {
+                            newW = Math.max(minW, sW + dx);
+                        }
+                        if (pos.includes('w')) {
+                            const calcW = sW - dx;
+                            if (calcW >= minW) { newW = calcW; newL = sL + dx; }
+                            else { newW = minW; newL = sL + (sW - minW); }
+                        }
+                        if (pos.includes('s')) {
+                            newH = Math.max(minH, sH + dy);
+                        }
+                        if (pos.includes('n')) {
+                            const calcH = sH - dy;
+                            if (calcH >= minH) { newH = calcH; newT = sT + dy; }
+                            else { newH = minH; newT = sT + (sH - minH); }
+                        }
                         
-                        element.style.width = `${Math.max(20, newW)}px`; 
-                        element.style.height = `${Math.max(20, newH)}px`; 
+                        element.style.width = `${newW}px`; 
+                        element.style.height = `${newH}px`; 
                         element.style.left = `${newL}px`; 
                         element.style.top = `${newT}px`; 
                         renderConnections(); 
@@ -1748,7 +1760,6 @@
             setTimeout(() => { textBox._allowDelete = true; }, 800);
             textBox.setAttribute('data-editing', 'true');
             applyEditableBlur(textBox); 
-            addConnectionPorts(textBox); 
             addCustomResizeHandle(textBox); 
             addStarMenu(textBox); 
             makeDraggable(textBox); 
@@ -1827,9 +1838,6 @@
                 if (e.button !== 0) return; 
                 if (mode === 'draw' || mode === 'laser_pen' || mode === 'arrow_line' || mode === 'plain_line') return; 
                 if(e.target.closest('.item-star-btn') || e.target.classList.contains('port') || e.target.classList.contains('resize-handle')) return; 
-                
-                const rect = element.getBoundingClientRect(); 
-                if (e.clientX > rect.right - 20 && e.clientY > rect.bottom - 20) return;
                 
                 // If element is being edited via dblclick, allow clicks inside to not close editing.
                 // Only close contentEditable if user clicks on a DIFFERENT element (via clearSelection in selectElement)
