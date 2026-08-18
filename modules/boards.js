@@ -225,37 +225,46 @@ boards.post('/invitations/:id/respond', async (c) => {
 });
 
 boards.get('/groups/:id/users', async (c) => {
-  const groupId = c.req.param('id');
-  const user = c.get('user');
+  try {
+    const groupId = c.req.param('id');
+    const user = c.get('user');
 
-  const groupRes = await db.query('SELECT owner_id FROM groups WHERE id = $1', [groupId]);
-  if (!groupRes.rows[0]) return c.json({ error: 'Organizasyon bulunamadı.' }, 404);
-  const groupOwnerId = groupRes.rows[0].owner_id;
+    const groupRes = await db.query('SELECT owner_id FROM groups WHERE id = $1', [groupId]);
+    if (!groupRes.rows[0]) return c.json({ error: 'Organizasyon bulunamadı.' }, 404);
+    const groupOwnerId = groupRes.rows[0].owner_id;
 
-  const res = await db.query(
-    'SELECT u.id, u.email, u.name, gm.role FROM users u JOIN group_members gm ON u.id = gm.user_id WHERE gm.group_id = $1',
-    [groupId]
-  );
-  const myRole = res.rows.find(r => r.id === user.id)?.role;
-  const isCreator = user.id === groupOwnerId;
-
-  let pending = [];
-  if (isCreator || myRole === 'owner') {
-    const invRes = await db.query(
-      'SELECT id, email FROM invitations WHERE group_id = $1 AND status = $2 ORDER BY created DESC',
-      [groupId, 'pending']
+    const res = await db.query(
+      'SELECT u.id, u.email, u.name, gm.role FROM users u JOIN group_members gm ON u.id = gm.user_id WHERE gm.group_id = $1',
+      [groupId]
     );
-    pending = invRes.rows;
-  }
+    const myRole = res.rows.find(r => r.id === user.id)?.role;
+    const isCreator = user.id === groupOwnerId;
 
-  return c.json({
-    users: res.rows,
-    isOwner: myRole === 'owner',
-    isCreator,
-    groupOwnerId,
-    myUserId: user.id,
-    pending
-  });
+    let pending = [];
+    if (isCreator || myRole === 'owner') {
+      try {
+        const invRes = await db.query(
+          'SELECT id, email FROM invitations WHERE group_id = $1 AND status = $2',
+          [groupId, 'pending']
+        );
+        pending = invRes.rows || [];
+      } catch (invErr) {
+        console.warn('[boards] invitations fetch warning:', invErr.message);
+      }
+    }
+
+    return c.json({
+      users: res.rows || [],
+      isOwner: myRole === 'owner',
+      isCreator,
+      groupOwnerId,
+      myUserId: user.id,
+      pending
+    });
+  } catch (err) {
+    console.error('[boards] /groups/:id/users error:', err);
+    return c.json({ error: 'Kullanıcılar listesi alınamadı: ' + err.message, users: [], pending: [] }, 500);
+  }
 });
 
 boards.put('/groups/:groupId/users/:userId/role', async (c) => {

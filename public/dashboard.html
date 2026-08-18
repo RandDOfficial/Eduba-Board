@@ -293,8 +293,15 @@
     });
 
     async function showGroupUsers(groupId) {
-      const res = await fetch('/api/boards/groups/' + groupId + '/users');
-      const data = await res.json();
+      try {
+        const res = await fetch('/api/boards/groups/' + groupId + '/users');
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          alert(errData.error || 'Grup kullanıcıları alınamadı.');
+          return;
+        }
+        const data = await res.json();
+        if (!data || !data.users) data.users = [];
 
       let pendingHtml = '';
       if (data.pending && data.pending.length > 0) {
@@ -362,6 +369,10 @@
 
       openModal('Grup Kullanıcıları', inviteFormHtml + usersHtml + pendingHtml);
       lucide.createIcons();
+      } catch (err) {
+        console.error('showGroupUsers error:', err);
+        alert('Grup kullanıcıları yüklenirken bir hata oluştu: ' + err.message);
+      }
     }
 
     async function sendGroupInvite(groupId) {
