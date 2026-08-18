@@ -2,61 +2,78 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 
-const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-const isPostgres = Boolean(databaseUrl || process.env.DB_TYPE === 'postgres');
+const databaseUrl = (typeof process !== 'undefined' && (process.env.DATABASE_URL || process.env.POSTGRES_URL)) || null;
+const isPostgres = Boolean(databaseUrl || (typeof process !== 'undefined' && process.env.DB_TYPE === 'postgres'));
 
 let sqlite = null;
 let pgPool = null;
+let d1Instance = null;
 
-if (isPostgres) {
-  const { Pool } = require('pg');
-  const poolConfig = {
-    connectionString: databaseUrl || `postgres://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'eduba'}`
-  };
+function setD1(d1) {
+  d1Instance = d1;
+}
 
-  if (process.env.DB_SSL === 'true' || (process.env.NODE_ENV === 'production' && databaseUrl?.includes('sslmode=require'))) {
-    poolConfig.ssl = { rejectUnauthorized: false };
+function getD1() {
+  return d1Instance;
+}
+
+// Initialize Node.js Database drivers (Postgres or better-sqlite3)
+if (typeof process !== 'undefined' && process.versions?.node) {
+  if (isPostgres) {
+    const { Pool } = require('pg');
+    const poolConfig = {
+      connectionString: databaseUrl || `postgres://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'eduba'}`
+    };
+
+    if (process.env.DB_SSL === 'true' || (process.env.NODE_ENV === 'production' && databaseUrl?.includes('sslmode=require'))) {
+      poolConfig.ssl = { rejectUnauthorized: false };
+    }
+
+    pgPool = new Pool(poolConfig);
+    pgPool.on('error', (err) => {
+      console.error('[db] PostgreSQL pool error:', err);
+    });
+  } else {
+    try {
+      const Database = require('better-sqlite3');
+      const defaultPath = process.env.NODE_ENV === 'production'
+        ? path.join(__dirname, '..', 'data', 'sqlite.db')
+        : path.join(__dirname, '..', 'sqlite.db');
+
+      let dbPath = process.env.DB_PATH || defaultPath;
+
+      if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
+        dbPath = path.join(dbPath, 'sqlite.db');
+      }
+
+      const dbDir = path.dirname(dbPath);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+
+      sqlite = new Database(dbPath);
+      sqlite.pragma('foreign_keys = ON');
+
+      sqlite.function('gen_random_uuid', () => crypto.randomUUID());
+      sqlite.function('now', () => new Date().toISOString());
+      sqlite.function('btrim', (str) => (str ? String(str).trim() : ''));
+      sqlite.function('split_part', (str, delim, pos) => {
+        if (!str) return '';
+        const parts = String(str).split(delim);
+        return parts[pos - 1] || '';
+      });
+    } catch (e) {
+      // In serverless/worker bundle environment, ignore local better-sqlite3 init
+    }
   }
-
-  pgPool = new Pool(poolConfig);
-  pgPool.on('error', (err) => {
-    console.error('[db] PostgreSQL pool error:', err);
-  });
-} else {
-  const Database = require('better-sqlite3');
-  const defaultPath = process.env.NODE_ENV === 'production'
-    ? path.join(__dirname, '..', 'data', 'sqlite.db')
-    : path.join(__dirname, '..', 'sqlite.db');
-
-  let dbPath = process.env.DB_PATH || defaultPath;
-
-  // Handle edge case where Docker mounted a directory instead of a file
-  if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
-    dbPath = path.join(dbPath, 'sqlite.db');
-  }
-
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  sqlite = new Database(dbPath);
-  sqlite.pragma('foreign_keys = ON');
-
-  // Register Postgres compatibility functions in SQLite
-  sqlite.function('gen_random_uuid', () => crypto.randomUUID());
-  sqlite.function('now', () => new Date().toISOString());
-  sqlite.function('btrim', (str) => (str ? String(str).trim() : ''));
-  sqlite.function('split_part', (str, delim, pos) => {
-    if (!str) return '';
-    const parts = String(str).split(delim);
-    return parts[pos - 1] || '';
-  });
 }
 
 async function initSchema(retries = 15, delay = 2000) {
+  if (d1Instance) {
+    return; // D1 schema is managed via migration / execute
+  }
+
   if (isPostgres) {
-    // Retry connecting to PostgreSQL (crucial when booting alongside Postgres in Docker Compose)
     for (let i = 0; i < retries; i++) {
       try {
         console.info(`[db] PostgreSQL bağlantısı kontrol ediliyor (${i + 1}/${retries})...`);
@@ -144,7 +161,7 @@ async function initSchema(retries = 15, delay = 2000) {
       DELETE FROM sessions WHERE expires <= CURRENT_TIMESTAMP;
     `);
     console.info('[db] PostgreSQL veritabanı hazır.');
-  } else {
+  } else if (sqlite) {
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -219,10 +236,11 @@ async function initSchema(retries = 15, delay = 2000) {
   }
 }
 
-// Ensure schema is created on startup
-initSchema().catch(err => {
-  console.error('[db] Şema başlatma hatası:', err);
-});
+if (typeof process !== 'undefined' && process.versions?.node) {
+  initSchema().catch(err => {
+    console.error('[db] Şema başlatma hatası:', err);
+  });
+}
 
 function normalizeParams(params = []) {
   return params.map(p => {
@@ -269,6 +287,23 @@ async function query(text, params = []) {
   const trimmedText = text.trim();
   const prep = prepareInsertQuery(trimmedText, params);
 
+  // Cloudflare D1 Support
+  if (d1Instance) {
+    const { sql, params: cleanParams } = transformQueryAndParams(prep.sql, prep.params);
+    const isSelect = /^(SELECT|WITH|PRAGMA)/i.test(sql);
+    const hasReturning = /RETURNING/i.test(sql);
+
+    const stmt = d1Instance.prepare(sql).bind(...cleanParams);
+    if (isSelect || hasReturning) {
+      const res = await stmt.all();
+      return { rows: res.results || [], rowCount: res.results?.length || 0, changes: res.meta?.changes || 0 };
+    } else {
+      const res = await stmt.run();
+      return { rows: [], rowCount: res.meta?.changes || 0, changes: res.meta?.changes || 0 };
+    }
+  }
+
+  // PostgreSQL Support
   if (isPostgres) {
     const norm = normalizeParams(prep.params);
     const res = await pgPool.query(prep.sql, norm);
@@ -279,6 +314,7 @@ async function query(text, params = []) {
     };
   }
 
+  // Local SQLite (better-sqlite3) Support
   return new Promise((resolve, reject) => {
     try {
       const { sql, params: cleanParams } = transformQueryAndParams(prep.sql, prep.params);
@@ -304,6 +340,8 @@ module.exports = {
   sqlite,
   pgPool,
   isPostgres,
+  setD1,
+  getD1,
   query,
   initSchema,
 };

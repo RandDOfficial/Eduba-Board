@@ -302,10 +302,11 @@
           <h4 style="margin-top:20px; margin-bottom:10px; color:#a1a1aa;">Bekleyen Davetler (${data.pending.length})</h4>
           ${data.pending.map(inv => `
             <div class="user-row">
-              <div style="display:flex; align-items:center; gap:8px; color:#e4e4e7;">
-                <i data-lucide="mail" style="width:16px;"></i> ${inv.email}
+              <div style="display:flex; align-items:center; gap:8px; color:#e4e4e7; min-width:0; flex:1; overflow:hidden; margin-right:8px;">
+                <i data-lucide="mail" style="width:16px; flex-shrink:0;"></i>
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${inv.email}">${inv.email}</span>
               </div>
-              <button class="btn-primary" style="background:#ef4444; padding:4px 10px;" onclick="cancelInvitation('${groupId}', '${inv.id}')">İptal Et</button>
+              <button class="btn-primary" style="background:#ef4444; padding:4px 10px; flex-shrink:0;" onclick="cancelInvitation('${groupId}', '${inv.id}')">İptal Et</button>
             </div>
           `).join('')}
         `;
@@ -346,11 +347,15 @@
 
         return `
         <div class="user-row">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <img src="${generateAvatar(u.name || u.email)}" class="avatar avatar-sm">
-            ${u.name || u.email} <span style="color:#71717a; font-size:11px; margin-left:4px;">(${u.email})</span> ${roleHtml}
+          <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; overflow:hidden; margin-right:8px;">
+            <img src="${generateAvatar(u.name || u.email)}" class="avatar avatar-sm" style="flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+              <span style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;" title="${u.name || ''}">${u.name || u.email}</span>
+              <span style="color:#71717a; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px;" title="${u.email}">(${u.email})</span>
+            </div>
+            <div style="flex-shrink:0;">${roleHtml}</div>
           </div>
-          ${actionBtn}
+          <div style="flex-shrink:0;">${actionBtn}</div>
         </div>
         `;
       }).join('');

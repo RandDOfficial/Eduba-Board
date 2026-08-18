@@ -10,7 +10,7 @@ RUN npm ci --only=production
 # Copy source code
 COPY modules ./modules
 COPY public ./public
-COPY cli.js index.js install.js ./
+COPY cli.js index.js install.js app.js worker.js ./
 
 # Create data and logs directories
 RUN mkdir -p /app/data /app/logs

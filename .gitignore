@@ -9,5 +9,8 @@ sqlite.db-wal
 sqlite.db-shm
 *.db
 .env
+.env.*
+.dev.vars
+.wrangler/
 *.md
 !README.md

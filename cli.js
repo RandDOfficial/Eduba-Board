@@ -1,5 +1,5 @@
 const db = require('./modules/db');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 async function run() {

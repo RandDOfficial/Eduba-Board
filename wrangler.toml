@@ -1,0 +1,26 @@
+name = "eduba-board"
+main = "worker.js"
+compatibility_date = "2026-08-18"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[assets]
+directory = "./public"
+
+[vars]
+NODE_ENV = "production"
+ALLOW_REGISTRATION = "true"
+
+[[d1_databases]]
+binding = "eduba_db"
+database_name = "eduba-db"
+database_id = "8d7afae0-cb25-48d6-b04b-de2a47b59bee"
+
+[durable_objects]
+bindings = [
+  { name = "BOARD_ROOM", class_name = "BoardRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BoardRoom"]
