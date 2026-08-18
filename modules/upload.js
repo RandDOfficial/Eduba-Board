@@ -49,10 +49,12 @@ upload.post('/', async (c) => {
       return c.json({ error: `Dosya çok büyük. Maksimum boyut: ${MAX_SIZE_BYTES / 1024 / 1024} MB` }, 413);
     }
 
-    // Resolve uploads directory relative to the project root
+    // Resolve uploads directory:
+    // - Docker/production: /app/data/uploads (inside volume)
+    // - Local dev: ./data/uploads
     const uploadsDir = path.resolve(
       process.env.UPLOADS_DIR ||
-      path.join(__dirname, '..', 'public', 'uploads')
+      path.join(__dirname, '..', 'data', 'uploads')
     );
 
     if (!fs.existsSync(uploadsDir)) {

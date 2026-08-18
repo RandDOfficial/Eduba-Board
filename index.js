@@ -39,6 +39,30 @@ function ensureSessionSecret() {
 }
 ensureSessionSecret();
 
+// Serve uploaded media files from data/uploads (persisted Docker volume)
+const uploadsDir = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.join(__dirname, 'data', 'uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+app.use('/uploads/*', async (c) => {
+  const filename = c.req.param('*');
+  const filepath = path.join(uploadsDir, filename);
+  if (!fs.existsSync(filepath)) return c.notFound();
+  const ext = path.extname(filename).toLowerCase().slice(1);
+  const mimeMap = {
+    mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml'
+  };
+  const mime = mimeMap[ext] || 'application/octet-stream';
+  const data = fs.readFileSync(filepath);
+  return new Response(data, { headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=31536000' } });
+});
+
 // Serve static assets from public directory
 app.use('/*', serveStatic({ root: './public' }));
 
