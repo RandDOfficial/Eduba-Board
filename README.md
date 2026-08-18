@@ -1,6 +1,7 @@
 # Eduba Board
 
-Gerçek zamanlı görsel planlama, çizim tahtası ve Kanban yönetim uygulaması.
+Gerçek zamanlı görsel planlama, çizim tahtası ve Kanban yönetim uygulaması.<br><br>
+![](https://raw.githubusercontent.com/RandDOfficial/Eduba-Board/refs/heads/main/example.png)
 
 ---
 
