@@ -535,14 +535,19 @@
     let currentInvitations = [];
 
     async function loadInvitations() {
-      const res = await fetch('/api/boards/invitations');
-      const data = await res.json();
-      currentInvitations = data.invitations || [];
-      const badge = document.getElementById('notifBadge');
-      if (currentInvitations.length > 0) {
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
+      try {
+        const res = await fetch('/api/boards/invitations');
+        if (!res.ok) return;
+        const data = await res.json();
+        currentInvitations = data.invitations || [];
+        const badge = document.getElementById('notifBadge');
+        if (currentInvitations.length > 0) {
+          badge.style.display = 'block';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (err) {
+        console.warn('loadInvitations warning:', err);
       }
     }
 

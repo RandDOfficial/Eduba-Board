@@ -162,24 +162,6 @@ async function initSchema(retries = 15, delay = 2000) {
 
       DELETE FROM sessions WHERE expires <= CURRENT_TIMESTAMP;
     `);
-
-    const pgMigrations = [
-      "ALTER TABLE invitations ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT ''",
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '📁'",
-      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS expanded INTEGER DEFAULT 0",
-      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE group_members ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'editor'",
-      "ALTER TABLE group_members ADD COLUMN IF NOT EXISTS expanded INTEGER DEFAULT 0",
-      "ALTER TABLE group_members ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE projects ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '📝'",
-      "ALTER TABLE projects ADD COLUMN IF NOT EXISTS created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE projects ADD COLUMN IF NOT EXISTS updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP"
-    ];
-    for (const sql of pgMigrations) {
-      try { await pgPool.query(sql); } catch(e) {}
-    }
     console.info('[db] PostgreSQL veritabanı hazır.');
   } else if (sqlite) {
     sqlite.exec(`
@@ -253,24 +235,7 @@ async function initSchema(retries = 15, delay = 2000) {
       DELETE FROM sessions WHERE expires <= datetime('now');
       DELETE FROM groups WHERE id NOT IN (SELECT DISTINCT group_id FROM group_members WHERE role = 'owner');
     `);
-
-    const sqliteMigrations = [
-      "ALTER TABLE invitations ADD COLUMN created TEXT DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
-      "ALTER TABLE users ADD COLUMN created TEXT DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE groups ADD COLUMN icon TEXT DEFAULT '📁'",
-      "ALTER TABLE groups ADD COLUMN expanded INTEGER DEFAULT 0",
-      "ALTER TABLE groups ADD COLUMN created TEXT DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE group_members ADD COLUMN role TEXT DEFAULT 'editor'",
-      "ALTER TABLE group_members ADD COLUMN expanded INTEGER DEFAULT 0",
-      "ALTER TABLE group_members ADD COLUMN created TEXT DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE projects ADD COLUMN icon TEXT DEFAULT '📝'",
-      "ALTER TABLE projects ADD COLUMN created TEXT DEFAULT CURRENT_TIMESTAMP",
-      "ALTER TABLE projects ADD COLUMN updated TEXT DEFAULT CURRENT_TIMESTAMP"
-    ];
-    for (const sql of sqliteMigrations) {
-      try { sqlite.exec(sql); } catch(e) {}
-    }
+    console.info('[db] SQLite veritabanı hazır.');
   }
 }
 

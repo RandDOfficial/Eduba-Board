@@ -200,39 +200,52 @@ boards.post('/invite', async (c) => {
 
 boards.get('/invitations', async (c) => {
   const user = c.get('user');
+  const cleanEmail = (user.email || '').toLowerCase().trim();
   const res = await db.query(
-    'SELECT i.id, i.group_id, g.name as group_name FROM invitations i JOIN groups g ON i.group_id = g.id WHERE i.email = $1 AND i.status = $2 ORDER BY i.created DESC',
-    [user.email, 'pending']
+    'SELECT i.id, i.group_id, g.name as group_name FROM invitations i JOIN groups g ON i.group_id = g.id WHERE LOWER(i.email) = $1 AND i.status = $2 ORDER BY i.created DESC',
+    [cleanEmail, 'pending']
   );
-  return c.json({ invitations: res.rows });
+  return c.json({ invitations: res.rows || [] });
 });
 
 boards.post('/invitations/:id/respond', async (c) => {
-  const { accept } = await c.req.json().catch(() => ({}));
-  const invId = c.req.param('id');
-  const user = c.get('user');
+  try {
+    const { accept } = await c.req.json().catch(() => ({}));
+    const invId = c.req.param('id');
+    const user = c.get('user');
 
-  const invRes = await db.query(
-    'SELECT group_id, email FROM invitations WHERE id = $1 AND status = $2',
-    [invId, 'pending']
-  );
-  if (!invRes.rows[0] || invRes.rows[0].email !== user.email) {
-    return c.json({ error: 'Yetkiniz yok.' }, 403);
-  }
-
-  const groupId = invRes.rows[0].group_id;
-
-  if (accept) {
-    await db.query(
-      'INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, $3)',
-      [groupId, user.id, 'member']
+    const invRes = await db.query(
+      'SELECT group_id, email FROM invitations WHERE id = $1 AND status = $2',
+      [invId, 'pending']
     );
-    await db.query('UPDATE invitations SET status = $1 WHERE id = $2', ['accepted', invId]);
-  } else {
-    await db.query('UPDATE invitations SET status = $1 WHERE id = $2', ['rejected', invId]);
-  }
+    if (!invRes.rows[0] || invRes.rows[0].email.toLowerCase() !== (user.email || '').toLowerCase()) {
+      return c.json({ error: 'Yetkiniz yok veya davet süresi dolmuş.' }, 403);
+    }
 
-  return c.json({ success: true, groupId: accept ? groupId : null });
+    const groupId = invRes.rows[0].group_id;
+
+    if (accept) {
+      // Check if already member
+      const memberCheck = await db.query(
+        'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+        [groupId, user.id]
+      );
+      if (memberCheck.rows.length === 0) {
+        await db.query(
+          'INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, $3)',
+          [groupId, user.id, 'member']
+        );
+      }
+      await db.query('UPDATE invitations SET status = $1 WHERE id = $2', ['accepted', invId]);
+    } else {
+      await db.query('UPDATE invitations SET status = $1 WHERE id = $2', ['rejected', invId]);
+    }
+
+    return c.json({ success: true, groupId: accept ? groupId : null });
+  } catch (err) {
+    console.error('[boards] /invitations/:id/respond error:', err);
+    return c.json({ error: 'Davet yanıtlanamadı: ' + err.message }, 500);
+  }
 });
 
 boards.get('/groups/:id/users', async (c) => {
