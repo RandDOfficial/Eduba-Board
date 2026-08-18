@@ -49,18 +49,25 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 app.use('/uploads/*', async (c) => {
-  const filename = c.req.param('*');
-  const filepath = path.join(uploadsDir, filename);
-  if (!fs.existsSync(filepath)) return c.notFound();
-  const ext = path.extname(filename).toLowerCase().slice(1);
-  const mimeMap = {
-    mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml'
-  };
-  const mime = mimeMap[ext] || 'application/octet-stream';
-  const data = fs.readFileSync(filepath);
-  return new Response(data, { headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=31536000' } });
+  try {
+    const reqPath = c.req.path; // e.g. /uploads/abc.mp4
+    const filename = path.basename(reqPath); // safety: prevent path traversal
+    if (!filename || filename === '.' || filename === '..') return c.notFound();
+    const filepath = path.join(uploadsDir, filename);
+    if (!fs.existsSync(filepath)) return c.notFound();
+    const ext = path.extname(filename).toLowerCase().slice(1);
+    const mimeMap = {
+      mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml'
+    };
+    const mime = mimeMap[ext] || 'application/octet-stream';
+    const data = fs.readFileSync(filepath);
+    return new Response(data, { headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=31536000' } });
+  } catch (err) {
+    console.error('[uploads] serve error:', err);
+    return c.json({ error: 'Dosya sunulamadı.' }, 500);
+  }
 });
 
 // Serve static assets from public directory
