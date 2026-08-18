@@ -17,7 +17,7 @@
     "better-sqlite3": "^11.8.0",
     "elenora": "^1.1.2",
     "fastify": "^5.10.0",
-    "node-fetch": "^2.7.0",
+    "pg": "^8.23.0",
     "ws": "^8.21.0",
     "y-protocols": "^1.0.7",
     "y-websocket": "^2.1.0",

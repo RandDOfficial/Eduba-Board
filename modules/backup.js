@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { sqlite } = require('./db');
+const db = require('./db');
 
 // Read environment variables or set fallbacks (48 hours, 5 backups)
 const BACKUP_INTERVAL_HOURS = parseInt(process.env.BACKUP_INTERVAL_HOURS || '48', 10);
@@ -31,23 +31,31 @@ function formatDate(date = new Date()) {
 }
 
 async function performBackup() {
+  if (db.isPostgres) {
+    return;
+  }
+
   try {
     ensureBackupsDir();
     const filename = `${formatDate()}.sqlite3`;
     const destPath = path.join(backupsDir, filename);
 
-    // Perform SQLite online backup
-    await sqlite.backup(destPath);
-    console.info(`[backup] Veritabanı yedeği alındı: ${filename}`);
+    if (db.sqlite) {
+      // Perform SQLite online backup
+      await db.sqlite.backup(destPath);
+      console.info(`[backup] Veritabanı yedeği alındı: ${filename}`);
 
-    // Clean up old backups if count exceeds MAX_BACKUPS
-    rotateBackups();
+      // Clean up old backups if count exceeds MAX_BACKUPS
+      rotateBackups();
+    }
   } catch (err) {
     console.error('[backup] Yedek alma hatası:', err);
   }
 }
 
 function rotateBackups() {
+  if (db.isPostgres) return;
+
   try {
     ensureBackupsDir();
     const files = fs.readdirSync(backupsDir)
@@ -78,7 +86,12 @@ function rotateBackups() {
 }
 
 function init() {
-  console.info(`[backup] Servis başlatıldı (Sıklık: ${BACKUP_INTERVAL_HOURS} saat, Max Limit: ${MAX_BACKUPS} yedek)`);
+  if (db.isPostgres) {
+    console.info('[backup] PostgreSQL veritabanı aktif (Yedeklemeler harici pg_dump / DB snapshot ile yönetilir).');
+    return;
+  }
+
+  console.info(`[backup] SQLite yedekleme servisi başlatıldı (Sıklık: ${BACKUP_INTERVAL_HOURS} saat, Max Limit: ${MAX_BACKUPS} yedek)`);
   
   // Initial backup on startup
   performBackup();

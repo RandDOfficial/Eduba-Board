@@ -9,7 +9,7 @@ module.exports = fastify => {
     if (!roomData || !roomData.state) return;
     const data = Buffer.from(roomData.state, 'utf8');
     await db.query(
-      'INSERT INTO board_docs (project_id, doc_data, updated) VALUES ($1, $2, now()) ON CONFLICT (project_id) DO UPDATE SET doc_data = $2, updated = now()',
+      'INSERT INTO board_docs (project_id, doc_data, updated) VALUES ($1, $2, now()) ON CONFLICT (project_id) DO UPDATE SET doc_data = EXCLUDED.doc_data, updated = now()',
       [room, data]
     );
     roomData.dirty = false;
