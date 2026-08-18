@@ -893,7 +893,27 @@
         if (document.getElementById('btnPen')) document.getElementById('btnPen').onclick = () => setMode('draw');
         if (document.getElementById('btnLaser')) document.getElementById('btnLaser').onclick = () => setMode('laser_pen');
 
+        function isTextItemEmpty(textItem) {
+            if (!textItem) return true;
+            const textDiv = textItem.querySelector('.shape-text');
+            if (!textDiv) return true;
+            const cleanText = textDiv.innerText.replace(/[\s\n\r]/g, '');
+            return cleanText === '';
+        }
+
+        function cleanupEmptyTextItems(skipEl) {
+            board.querySelectorAll('.text-item').forEach(el => {
+                if (el === skipEl) return;
+                if (isTextItemEmpty(el)) {
+                    const id = el.id;
+                    el.remove();
+                    if (id && window.sendDeleteElement) window.sendDeleteElement(id);
+                }
+            });
+        }
+
         function clearSelection(skipEl) {
+            cleanupEmptyTextItems(skipEl);
             selectedElements.forEach(el => {
                 if (el === skipEl) return;
                 if (el.classList) el.classList.remove('selected');
@@ -1706,7 +1726,7 @@
                 if (textDiv) textDiv.contentEditable = "false";
                 element._isBeingEdited = false;
                 element.removeAttribute('data-editing');
-                if (element.innerText.trim() === '' && element.classList.contains('text-item') && element._allowDelete) {
+                if (element.classList.contains('text-item') && isTextItemEmpty(element)) {
                     const _id = element.id;
                     element.remove();
                     if (_id && window.sendDeleteElement) window.sendDeleteElement(_id);
@@ -1890,8 +1910,6 @@
             textBox.style.fontSize = (fontSizeInput.value || '24') + 'px'; 
             textBox.style.fontFamily = fontFamilySelect.value;
             
-            textBox._allowDelete = false;
-            setTimeout(() => { textBox._allowDelete = true; }, 800);
             applyEditableBlur(textBox); 
             addCustomResizeHandle(textBox); 
             addStarMenu(textBox); 
@@ -2855,7 +2873,7 @@
             if (target && target.isContentEditable) {
                 // Handle empty text-item removal
                 const textItem = target.closest('.text-item');
-                if (textItem && textItem.innerText.trim() === '' && textItem._allowDelete) {
+                if (textItem && isTextItemEmpty(textItem)) {
                     const id = textItem.id;
                     textItem.remove();
                     if (id && window.sendDeleteElement) window.sendDeleteElement(id);
