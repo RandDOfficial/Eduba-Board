@@ -41,8 +41,14 @@ async function performBackup() {
     const destPath = path.join(backupsDir, filename);
 
     if (db.sqlite) {
-      // Perform SQLite online backup
-      await db.sqlite.backup(destPath);
+      if (typeof db.sqlite.backup === 'function') {
+        await db.sqlite.backup(destPath);
+      } else {
+        const sourcePath = process.env.DB_PATH || (process.env.NODE_ENV === 'production' ? path.join(__dirname, '..', 'data', 'sqlite.db') : path.join(__dirname, '..', 'sqlite.db'));
+        if (fs.existsSync(sourcePath)) {
+          fs.copyFileSync(sourcePath, destPath);
+        }
+      }
       console.info(`[backup] Veritabanı yedeği alındı: ${filename}`);
 
       // Clean up old backups if count exceeds MAX_BACKUPS

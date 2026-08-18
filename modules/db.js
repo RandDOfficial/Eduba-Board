@@ -34,36 +34,35 @@ if (typeof process !== 'undefined' && process.versions?.node) {
       console.error('[db] PostgreSQL pool error:', err);
     });
   } else {
+    const defaultPath = process.env.NODE_ENV === 'production'
+      ? path.join(__dirname, '..', 'data', 'sqlite.db')
+      : path.join(__dirname, '..', 'sqlite.db');
+
+    let dbPath = process.env.DB_PATH || defaultPath;
+
+    if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
+      dbPath = path.join(dbPath, 'sqlite.db');
+    }
+
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     try {
-      const Database = require('better-sqlite3');
-      const defaultPath = process.env.NODE_ENV === 'production'
-        ? path.join(__dirname, '..', 'data', 'sqlite.db')
-        : path.join(__dirname, '..', 'sqlite.db');
-
-      let dbPath = process.env.DB_PATH || defaultPath;
-
-      if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
-        dbPath = path.join(dbPath, 'sqlite.db');
+      // 1. Try Node.js built-in native sqlite (Node 22+)
+      const { DatabaseSync } = require('node:sqlite');
+      sqlite = new DatabaseSync(dbPath);
+      sqlite.exec('PRAGMA foreign_keys = ON;');
+    } catch (nodeSqliteErr) {
+      try {
+        // 2. Fallback to better-sqlite3 (Node 20 / Docker)
+        const Database = require('better-sqlite3');
+        sqlite = new Database(dbPath);
+        sqlite.pragma('foreign_keys = ON');
+      } catch (betterSqliteErr) {
+        // In Cloudflare Workers environment, local sqlite is not needed
       }
-
-      const dbDir = path.dirname(dbPath);
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
-      }
-
-      sqlite = new Database(dbPath);
-      sqlite.pragma('foreign_keys = ON');
-
-      sqlite.function('gen_random_uuid', () => crypto.randomUUID());
-      sqlite.function('now', () => new Date().toISOString());
-      sqlite.function('btrim', (str) => (str ? String(str).trim() : ''));
-      sqlite.function('split_part', (str, delim, pos) => {
-        if (!str) return '';
-        const parts = String(str).split(delim);
-        return parts[pos - 1] || '';
-      });
-    } catch (e) {
-      // In serverless/worker bundle environment, ignore local better-sqlite3 init
     }
   }
 }

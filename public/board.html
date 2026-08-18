@@ -1296,7 +1296,6 @@
                     board.appendChild(drawingDiv); 
                     undoStack.push({ type: 'dom', element: drawingDiv });
                     redoStack = []; 
-                    selectElement(drawingDiv);
 
                     if (window.sendAddElement) window.sendAddElement(drawingDiv);
                 }
@@ -2808,7 +2807,7 @@
             clearTimeout(saveTimer);
             saveTimer = setTimeout(() => {
                 saveNow(false);
-            }, 1500);
+            }, 800);
         }
 
         function saveNow(showToast = false) {
