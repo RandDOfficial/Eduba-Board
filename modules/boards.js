@@ -147,43 +147,54 @@ boards.post('/invite', async (c) => {
   const { groupId, email } = await c.req.json().catch(() => ({}));
   const user = c.get('user');
 
+  if (!groupId || !email) {
+    return c.json({ error: 'Grup ve e-posta adresi gereklidir.' }, 400);
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
   try {
     const roleRes = await db.query(
       'SELECT role FROM group_members WHERE group_id = $1 AND user_id = $2',
       [groupId, user.id]
     );
     if (!roleRes.rows[0] || roleRes.rows[0].role !== 'owner') {
-      return c.json({ error: 'Yetkiniz yok.' }, 403);
+      return c.json({ error: 'Bu gruba davet gönderme yetkiniz yok.' }, 403);
     }
 
-    const userRes = await db.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
-    if (!userRes.rows[0]) return c.json({ error: 'Kullanıcı bulunamadı.' }, 404);
+    const userRes = await db.query('SELECT id FROM users WHERE email = $1', [cleanEmail]);
+    if (!userRes.rows[0]) return c.json({ error: 'Bu e-posta adresine kayıtlı bir kullanıcı bulunamadı.' }, 404);
 
     const memberRes = await db.query(
       'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
       [groupId, userRes.rows[0].id]
     );
     if (memberRes.rows.length > 0) {
-      return c.json({ error: 'Kullanıcı zaten grupta.' }, 400);
+      return c.json({ error: 'Bu kullanıcı zaten grupta kayıtlı.' }, 400);
     }
 
     // Limit to max 100 pending invitations
-    const invListRes = await db.query('SELECT id FROM invitations WHERE group_id = $1 ORDER BY created ASC', [groupId]);
-    if (invListRes.rows.length >= 100) {
-      const excess = invListRes.rows.length - 99;
-      for (let i = 0; i < excess; i++) {
-        await db.query('DELETE FROM invitations WHERE id = $1', [invListRes.rows[i].id]);
+    try {
+      const invListRes = await db.query('SELECT id FROM invitations WHERE group_id = $1 ORDER BY created ASC', [groupId]);
+      if (invListRes.rows.length >= 100) {
+        const excess = invListRes.rows.length - 99;
+        for (let i = 0; i < excess; i++) {
+          await db.query('DELETE FROM invitations WHERE id = $1', [invListRes.rows[i].id]);
+        }
       }
+    } catch (cleanErr) {
+      console.warn('[boards] Cleanup old invitations warning:', cleanErr.message);
     }
 
+    const invId = crypto.randomUUID();
     await db.query(
-      'INSERT INTO invitations (group_id, email, status) VALUES ($1, $2, $3) ON CONFLICT (group_id, email) DO UPDATE SET status = $3',
-      [groupId, email.toLowerCase().trim(), 'pending']
+      'INSERT INTO invitations (id, group_id, email, status) VALUES ($1, $2, $3, $4) ON CONFLICT (group_id, email) DO UPDATE SET status = $4',
+      [invId, groupId, cleanEmail, 'pending']
     );
     return c.json({ success: true });
   } catch (e) {
     console.error('[boards] Invite error:', e);
-    return c.json({ error: 'Failed to invite' }, 500);
+    return c.json({ error: 'Davet gönderilemedi: ' + e.message }, 500);
   }
 });
 

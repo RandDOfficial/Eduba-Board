@@ -290,7 +290,7 @@ function normalizeParams(params = []) {
 }
 
 function prepareInsertQuery(sql, params) {
-  const match = sql.match(/^INSERT\s+INTO\s+([a-z_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)(.*)$/i);
+  const match = sql.match(/^INSERT\s+INTO\s+([a-z_]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)(.*)$/is);
   if (match) {
     const table = match[1].toLowerCase();
     const cols = match[2].split(',').map(c => c.trim().toLowerCase());
@@ -301,8 +301,8 @@ function prepareInsertQuery(sql, params) {
       const newId = crypto.randomUUID();
       const shiftedValues = match[3].replace(/\$(\d+)/g, (_, n) => '$' + (parseInt(n, 10) + 1));
       const newValues = '$1, ' + shiftedValues;
-      const rest = match[4];
-      const newSql = `INSERT INTO ${table} (${newCols}) VALUES (${newValues})${rest}`;
+      const shiftedRest = match[4].replace(/\$(\d+)/g, (_, n) => '$' + (parseInt(n, 10) + 1));
+      const newSql = `INSERT INTO ${table} (${newCols}) VALUES (${newValues})${shiftedRest}`;
       const newParams = [newId, ...params];
       return { sql: newSql, params: newParams };
     }
