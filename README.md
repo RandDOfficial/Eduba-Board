@@ -73,6 +73,7 @@ volumes:
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Sunucu portu |
 | `NODE_ENV` | `development` | Çalışma ortamı (`production` / `development`) |
+| `SESSION_SECRET` | *(Otomatik)* | Çerez imzalama anahtarı (Boşsa `./data/cookie_secret.key` olarak otomatik üretilir ve korunur) |
 | `ALLOW_REGISTRATION` | `true` | Yeni kullanıcı kayıt durumu (`true` / `false`) |
 | `DATABASE_URL` | *(Boş)* | PostgreSQL bağlantı adresi (Boş ise SQLite kullanılır) |
 | `DB_PATH` | `/app/data/sqlite.db` | SQLite dosya yolu |
