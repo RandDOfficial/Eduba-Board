@@ -5,5 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    environment:
+      - BACKUP_INTERVAL_HOURS=48
+      - MAX_BACKUPS=5
     volumes:
       - ./data:/app/data

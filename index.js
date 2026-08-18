@@ -5,7 +5,7 @@ const logDir = process.env.LOG_DIR || (process.env.DB_PATH ? path.join(path.dirn
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
-require('elenora').connect(console, { filename: path.join(logDir, 'app.log'), maxSize: 1024 * 1024, backupCount: 3, continueFromLast: true });
+require('elenora').connect(console, { filename: path.join(logDir, 'app.log'), maxSize: 1024 * 1024, backupCount: 3, continueFromLast: true, interval: 60 * 1000 });
 const fastify = require('fastify')({ bodyLimit: 100 * 1024 * 1024 });
 
 fastify.register(require('@fastify/cookie'), { secret: 'eduba-super-secret' });
@@ -22,6 +22,7 @@ fastify.register(require('@fastify/static'), {
 require('./modules/auth')(fastify);
 require('./modules/boards')(fastify);
 require('./modules/ws')(fastify);
+require('./modules/backup').init();
 
 fastify.get('/', (request, reply) => {
   const token = request.cookies.session_token;

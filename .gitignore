@@ -1,8 +1,12 @@
 node_modules/
 logs/
+backups/
+data/backups/
 sqlite.db
 sqlite.db-journal
 sqlite.db-wal
 sqlite.db-shm
 *.db
 .env
+*.md
+!README.md
