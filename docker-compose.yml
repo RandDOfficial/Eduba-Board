@@ -6,6 +6,8 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - NODE_ENV=production
+      - ALLOW_REGISTRATION=true
       - BACKUP_INTERVAL_HOURS=48
       - MAX_BACKUPS=5
     volumes:

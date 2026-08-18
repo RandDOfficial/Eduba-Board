@@ -1,27 +1,12 @@
 # Eduba Board
 
-Gerçek zamanlı iş birliği, görsel tahta ve Kanban tabanlı proje yönetim platformu. Ekiplerin veya bireysel kullanıcıların serbest kanvas üzerinde fikirlerini görselleştirmesini, notlar almasını ve görevlerini yönetmesini sağlar.
+Gerçek zamanlı görsel planlama, çizim tahtası ve Kanban yönetim uygulaması.
 
 ---
 
-## Öne Çıkan Özellikler
+## Kurulum (Docker Compose)
 
-- **Gerçek Zamanlı Çizim ve Kanvas**: WebSocket tabanlı anlık imleç ve nesne senkronizasyonu ile aynı anda ortak çalışma.
-- **Entegre Kanban Panosu**: Tahta içinde görev yönetimi (Yapılacaklar, Devam Edenler, Tamamlananlar).
-- **Organizasyon ve Proje Yönetimi**: Ekipler, kişisel projeler ve e-posta ile davet sistemi.
-- **Evrensel Veritabanı Desteği**: Sıfır yapılandırmayla yerel SQLite veya yüksek ölçek için PostgreSQL.
-- **Otomatik Yedekleme & Kalıcılık**: SQLite veritabanı için zamanlanmış otomatik yedekleme ve rotasyon.
-- **Gizlilik Odaklı**: Tüm verileriniz kendi sunucunuzda veya container ortamınızda kalır.
-
----
-
-## Kurulum ve Dağıtım (Docker)
-
-Eduba Board, resmi GitHub Container Registry (`ghcr.io`) imajı üzerinden doğrudan çalıştırılabilir.
-
-### 1. Hızlı Başlangıç (Yerel SQLite ile)
-
-Aşağıdaki `docker-compose.yml` dosyasını oluşturun ve çalıştırın:
+### 1. SQLite ile Çalıştırma (Varsayılan)
 
 ```yaml
 services:
@@ -40,17 +25,13 @@ services:
       - ./data:/app/data
 ```
 
-Container'ı başlatın:
 ```bash
 docker compose up -d
 ```
-Tarayıcınızdan `http://localhost:3000` adresine gidin.
 
 ---
 
-### 2. PostgreSQL ile Üretim (Production) Kurulumu
-
-Daha yüksek kullanıcı kapasitesi ve harici veritabanı yönetimi için Eduba'yı PostgreSQL ile birlikte çalıştırabilirsiniz:
+### 2. PostgreSQL ile Çalıştırma
 
 ```yaml
 services:
@@ -62,7 +43,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgres://postgres:securepassword@postgres:5432/edubadb
+      - BACKUP_INTERVAL_HOURS=48
+      - MAX_BACKUPS=5
+      - DATABASE_URL=postgres://postgres:password123@postgres:5432/edubadb
       - ALLOW_REGISTRATION=true
     depends_on:
       - postgres
@@ -74,7 +57,7 @@ services:
     environment:
       POSTGRES_DB: edubadb
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: securepassword
+      POSTGRES_PASSWORD: password123
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -84,21 +67,14 @@ volumes:
 
 ---
 
-## Ortam Değişkenleri (Environment Variables)
+## Ortam Değişkenleri
 
 | Değişken | Varsayılan | Açıklama |
 | :--- | :--- | :--- |
-| `PORT` | `3000` | Sunucunun dinleyeceği port |
-| `NODE_ENV` | `development` | Çalışma ortamı (`production` veya `development`) |
-| `ALLOW_REGISTRATION` | `true` | Yeni kullanıcı kayıtlarına izin verilsin mi (`true`/`false`) |
-| `DATABASE_URL` | *(Boş)* | PostgreSQL bağlantı adresi (Belirtilmezse SQLite kullanılır) |
-| `DB_PATH` | `/app/data/sqlite.db` | SQLite veritabanı dosyasının konumu |
-| `BACKUP_INTERVAL_HOURS` | `48` | SQLite otomatik yedekleme periyodu (Saat cinsinden) |
-| `MAX_BACKUPS` | `5` | Saklanacak maksimum geçmiş yedek sayısı |
-
----
-
-## Veri Yedekleme ve Kalıcılık
-
-- **SQLite Modunda**: `./data` dizini container'a bağlanarak veriler korunur. Sistem her 48 saatte bir (veya belirlenen aralıkta) `./data/backups/` içerisine otomatik SQLite yedeği alır ve eski yedekleri temizler.
-- **PostgreSQL Modunda**: Veriler `pgdata` volume'ünde saklanır. Yedeklemeler standart PostgreSQL araçlarıyla (`pg_dump`) veya bulut veritabanı anlık görüntüleriyle yönetilir.
+| `PORT` | `3000` | Sunucu portu |
+| `NODE_ENV` | `development` | Çalışma ortamı (`production` / `development`) |
+| `ALLOW_REGISTRATION` | `true` | Yeni kullanıcı kayıt durumu (`true` / `false`) |
+| `DATABASE_URL` | *(Boş)* | PostgreSQL bağlantı adresi (Boş ise SQLite kullanılır) |
+| `DB_PATH` | `/app/data/sqlite.db` | SQLite dosya yolu |
+| `BACKUP_INTERVAL_HOURS` | `48` | SQLite otomatik yedek alma sıklığı (Saat) |
+| `MAX_BACKUPS` | `5` | Tutulacak maksimum SQLite yedek sayısı |
