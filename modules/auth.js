@@ -39,7 +39,11 @@ module.exports = function(fastify) {
       const res = await db.query('INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id', [email, hash, name.trim()]);
       return reply.code(201).send({ success: true, id: res.rows[0].id });
     } catch (e) {
-      return reply.code(409).send({ error: 'Email exists' });
+      console.error('[auth] Kayıt hatası:', e);
+      if (e.code === '23505' || e.message?.includes('UNIQUE') || e.message?.includes('constraint failed')) {
+        return reply.code(409).send({ error: 'Bu e-posta adresi ile zaten kayıtlı bir hesap var.' });
+      }
+      return reply.code(500).send({ error: 'Kayıt sırasında bir sunucu hatası oluştu: ' + (e.message || 'Veritabanı hatası') });
     }
   });
 
@@ -48,16 +52,21 @@ module.exports = function(fastify) {
     if (!email || !password) {
       return reply.code(400).send({ error: 'E-posta ve şifre zorunludur.' });
     }
-    const res = await db.query('SELECT id, password, name FROM users WHERE email = $1', [email]);
-    if (!res.rows[0] || !(await bcrypt.compare(password, res.rows[0].password))) {
-      return reply.code(401).send({ error: 'Invalid credentials' });
-    }
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await db.query('INSERT INTO sessions (token, user_id, expires) VALUES ($1, $2, $3)', [token, res.rows[0].id, expires]);
+    try {
+      const res = await db.query('SELECT id, password, name FROM users WHERE email = $1', [email]);
+      if (!res.rows[0] || !(await bcrypt.compare(password, res.rows[0].password))) {
+        return reply.code(401).send({ error: 'E-posta veya şifre hatalı.' });
+      }
+      const token = crypto.randomBytes(32).toString('hex');
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.query('INSERT INTO sessions (token, user_id, expires) VALUES ($1, $2, $3)', [token, res.rows[0].id, expires]);
 
-    reply.setCookie('session_token', token, { path: '/', httpOnly: true, expires });
-    return { success: true, email, name: res.rows[0].name };
+      reply.setCookie('session_token', token, { path: '/', httpOnly: true, expires });
+      return { success: true, email, name: res.rows[0].name };
+    } catch (err) {
+      console.error('[auth] Giriş hatası:', err);
+      return reply.code(500).send({ error: 'Giriş sırasında sunucu hatası: ' + (err.message || 'Veritabanı hatası') });
+    }
   });
 
   fastify.post('/api/auth/logout', async (request, reply) => {

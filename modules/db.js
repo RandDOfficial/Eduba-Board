@@ -54,12 +54,28 @@ if (isPostgres) {
   });
 }
 
-async function initSchema() {
+async function initSchema(retries = 15, delay = 2000) {
   if (isPostgres) {
-    console.info('[db] PostgreSQL veritabanı şeması doğrulanıyor...');
+    // Retry connecting to PostgreSQL (crucial when booting alongside Postgres in Docker Compose)
+    for (let i = 0; i < retries; i++) {
+      try {
+        console.info(`[db] PostgreSQL bağlantısı kontrol ediliyor (${i + 1}/${retries})...`);
+        await pgPool.query('SELECT 1');
+        break;
+      } catch (err) {
+        if (i === retries - 1) {
+          console.error('[db] PostgreSQL veritabanına bağlanılamadı:', err.message);
+          throw err;
+        }
+        console.warn(`[db] PostgreSQL henüz hazır değil (${err.message}). ${delay / 1000} saniye içinde tekrar deneniyor...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+
+    console.info('[db] PostgreSQL tabloları oluşturuluyor/doğrulanıyor...');
     await pgPool.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -75,7 +91,7 @@ async function initSchema() {
       );
 
       CREATE TABLE IF NOT EXISTS groups (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,
         icon TEXT DEFAULT '📁',
@@ -88,11 +104,12 @@ async function initSchema() {
         user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
         role TEXT DEFAULT 'editor',
         expanded INTEGER DEFAULT 0,
+        created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (group_id, user_id)
       );
 
       CREATE TABLE IF NOT EXISTS projects (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL DEFAULT 'Untitled',
         group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
         owner_id TEXT REFERENCES users(id) NOT NULL,
@@ -108,10 +125,11 @@ async function initSchema() {
       );
 
       CREATE TABLE IF NOT EXISTS invitations (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        id TEXT PRIMARY KEY,
         group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
         email TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
+        created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(group_id, email)
       );
 
@@ -125,7 +143,7 @@ async function initSchema() {
 
       DELETE FROM sessions WHERE expires <= CURRENT_TIMESTAMP;
     `);
-    console.info('[db] PostgreSQL tabloları hazır.');
+    console.info('[db] PostgreSQL veritabanı hazır.');
   } else {
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -158,6 +176,7 @@ async function initSchema() {
         user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
         role TEXT DEFAULT 'editor',
         expanded INTEGER DEFAULT 0,
+        created TEXT DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (group_id, user_id)
       );
 
@@ -182,6 +201,7 @@ async function initSchema() {
         group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
         email TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
+        created TEXT DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(group_id, email)
       );
 
@@ -207,7 +227,7 @@ initSchema().catch(err => {
 function normalizeParams(params = []) {
   return params.map(p => {
     if (p instanceof Date) return p.toISOString();
-    if (typeof p === 'boolean') return p ? 1 : 0;
+    if (typeof p === 'boolean') return isPostgres ? p : (p ? 1 : 0);
     if (p === undefined) return null;
     return p;
   });
@@ -246,8 +266,12 @@ function transformQueryAndParams(sql, params) {
 }
 
 async function query(text, params = []) {
+  const trimmedText = text.trim();
+  const prep = prepareInsertQuery(trimmedText, params);
+
   if (isPostgres) {
-    const res = await pgPool.query(text, params);
+    const norm = normalizeParams(prep.params);
+    const res = await pgPool.query(prep.sql, norm);
     return {
       rows: res.rows,
       rowCount: res.rowCount,
@@ -257,8 +281,6 @@ async function query(text, params = []) {
 
   return new Promise((resolve, reject) => {
     try {
-      const trimmedText = text.trim();
-      const prep = prepareInsertQuery(trimmedText, params);
       const { sql, params: cleanParams } = transformQueryAndParams(prep.sql, prep.params);
       const stmt = sqlite.prepare(sql);
 

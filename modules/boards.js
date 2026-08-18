@@ -120,7 +120,7 @@ module.exports = function(fastify) {
       if (memberRes.rows.length > 0) return reply.code(400).send({ error: 'Kullanıcı zaten grupta.' });
 
       // Check max 100 limit: delete oldest excess invitations
-      const invListRes = await db.query('SELECT id FROM invitations WHERE group_id = $1 ORDER BY rowid ASC', [groupId]);
+      const invListRes = await db.query('SELECT id FROM invitations WHERE group_id = $1 ORDER BY created ASC', [groupId]);
       if (invListRes.rows.length >= 100) {
         const excess = invListRes.rows.length - 99;
         for (let i = 0; i < excess; i++) {
@@ -136,7 +136,7 @@ module.exports = function(fastify) {
   });
 
   fastify.get('/api/boards/invitations', { preHandler: [fastify.requireUser] }, async (request, reply) => {
-    const res = await db.query('SELECT i.id, i.group_id, g.name as group_name FROM invitations i JOIN groups g ON i.group_id = g.id WHERE i.email = $1 AND i.status = $2 ORDER BY i.rowid DESC', [request.user.email, 'pending']);
+    const res = await db.query('SELECT i.id, i.group_id, g.name as group_name FROM invitations i JOIN groups g ON i.group_id = g.id WHERE i.email = $1 AND i.status = $2 ORDER BY i.created DESC', [request.user.email, 'pending']);
     return { invitations: res.rows };
   });
 
@@ -174,7 +174,7 @@ module.exports = function(fastify) {
 
     let pending = [];
     if (isCreator || myRole === 'owner') {
-       const invRes = await db.query('SELECT id, email FROM invitations WHERE group_id = $1 AND status = $2 ORDER BY rowid DESC', [groupId, 'pending']);
+       const invRes = await db.query('SELECT id, email FROM invitations WHERE group_id = $1 AND status = $2 ORDER BY created DESC', [groupId, 'pending']);
        pending = invRes.rows;
     }
 
@@ -216,7 +216,7 @@ module.exports = function(fastify) {
     if (isCreator) {
       // 1. Prefer another member with role='owner' (Yönetici)
       const otherAdmins = await db.query(
-        "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 AND role = 'owner' ORDER BY rowid ASC LIMIT 1",
+        "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 AND role = 'owner' ORDER BY created ASC LIMIT 1",
         [groupId, userId]
       );
       let nextOwnerId = otherAdmins.rows[0] ? otherAdmins.rows[0].user_id : null;
@@ -224,7 +224,7 @@ module.exports = function(fastify) {
       // 2. Otherwise fallback to any other member (Üye)
       if (!nextOwnerId) {
         const anyOtherMember = await db.query(
-          "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 ORDER BY rowid ASC LIMIT 1",
+          "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 ORDER BY created ASC LIMIT 1",
           [groupId, userId]
         );
         if (anyOtherMember.rows[0]) nextOwnerId = anyOtherMember.rows[0].user_id;

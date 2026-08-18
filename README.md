@@ -8,6 +8,10 @@ Gerçek zamanlı görsel planlama, çizim tahtası ve Kanban yönetim uygulamas�
 
 ### 1. SQLite ile Çalıştırma (Varsayılan)
 
+```bash
+nano docker-compose.yml
+```
+
 ```yaml
 services:
   eduba:
@@ -32,6 +36,10 @@ docker compose up -d
 ---
 
 ### 2. PostgreSQL ile Çalıştırma
+
+```bash
+nano docker-compose.yml
+```
 
 ```yaml
 services:
@@ -63,6 +71,10 @@ services:
 
 volumes:
   pgdata:
+```
+
+```bash
+docker compose up -d
 ```
 
 ---

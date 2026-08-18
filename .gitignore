@@ -1,6 +1,7 @@
 node_modules/
 logs/
 backups/
+data/
 data/backups/
 sqlite.db
 sqlite.db-journal
