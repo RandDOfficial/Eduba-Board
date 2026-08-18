@@ -17,8 +17,10 @@ function getD1() {
   return d1Instance;
 }
 
+const isCloudflare = typeof WebSocketPair !== 'undefined' || (typeof navigator !== 'undefined' && navigator.userAgent?.includes('Cloudflare-Workers'));
+
 // Initialize Node.js Database drivers (Postgres or better-sqlite3)
-if (typeof process !== 'undefined' && process.versions?.node) {
+if (!isCloudflare && typeof process !== 'undefined' && process.versions?.node) {
   if (isPostgres) {
     const { Pool } = require('pg');
     const poolConfig = {
@@ -34,9 +36,10 @@ if (typeof process !== 'undefined' && process.versions?.node) {
       console.error('[db] PostgreSQL pool error:', err);
     });
   } else {
+    const baseDir = typeof __dirname !== 'undefined' ? __dirname : (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.');
     const defaultPath = process.env.NODE_ENV === 'production'
-      ? path.join(__dirname, '..', 'data', 'sqlite.db')
-      : path.join(__dirname, '..', 'sqlite.db');
+      ? path.join(baseDir, '..', 'data', 'sqlite.db')
+      : path.join(baseDir, '..', 'sqlite.db');
 
     let dbPath = process.env.DB_PATH || defaultPath;
 
