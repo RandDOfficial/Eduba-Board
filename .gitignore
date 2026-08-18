@@ -14,3 +14,4 @@ sqlite.db-shm
 .wrangler/
 *.md
 !README.md
+public/uploads/

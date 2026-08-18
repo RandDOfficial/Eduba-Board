@@ -6,6 +6,7 @@ workers_dev = true
 
 [assets]
 directory = "./public"
+exclude = ["uploads/*"]
 
 [vars]
 NODE_ENV = "production"

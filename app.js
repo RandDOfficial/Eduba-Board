@@ -3,6 +3,7 @@ const { getCookie } = require('hono/cookie');
 const { cors } = require('hono/cors');
 const { auth } = require('./modules/auth');
 const { boards } = require('./modules/boards');
+const { upload } = require('./modules/upload');
 
 const db = require('./modules/db');
 
@@ -25,6 +26,7 @@ app.use('*', async (c, next) => {
 // Mount API routes
 app.route('/api/auth', auth);
 app.route('/api/boards', boards);
+app.route('/api/upload', upload);
 
 // Root entry redirect
 app.get('/', (c) => {

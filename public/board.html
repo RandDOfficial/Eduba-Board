@@ -2230,21 +2230,42 @@
             });
         }
 
-        function renderMediaOnBoard(file, x, y) { 
+        async function renderMediaOnBoard(file, x, y) { 
             if (!file) return;
             const isImage = file.type.startsWith('image/');
             const isVideo = file.type.startsWith('video/');
             if (!isImage && !isVideo) return;
 
-            const reader = new FileReader(); 
-            reader.onload = (event) => { 
+            // Show a loading indicator while uploading
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e2e;color:#a5b4fc;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 4px 20px #0008;border:1px solid #3b3b5a;';
+            toast.textContent = '⏳ Dosya yükleniyor...';
+            document.body.appendChild(toast);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (!res.ok || !data.url) {
+                    toast.textContent = '❌ ' + (data.error || 'Yükleme başarısız');
+                    toast.style.color = '#f87171';
+                    setTimeout(() => toast.remove(), 3000);
+                    return;
+                }
+
+                const mediaUrl = data.url;
+                toast.remove();
+
                 const mediaContainer = document.createElement('div'); 
                 mediaContainer.id = generateId();
                 mediaContainer.className = 'media-item'; 
                 
                 if (isVideo) {
                     const video = document.createElement('video'); 
-                    video.src = event.target.result; 
+                    video.src = mediaUrl;
                     video.controls = true;
                     video.autoplay = false;
                     video.loop = true;
@@ -2275,9 +2296,26 @@
                         if (typeof setMode === 'function') setMode('pan');
                         if (window.sendAddElement) window.sendAddElement(mediaContainer);
                     };
+                    // Fallback if metadata never fires (e.g. unsupported codec)
+                    video.onerror = () => {
+                        mediaContainer.style.width = '480px'; 
+                        mediaContainer.style.height = '270px'; 
+                        mediaContainer.style.left = `${x - 240}px`; 
+                        mediaContainer.style.top = `${y - 135}px`;
+                        addConnectionPorts(mediaContainer); 
+                        addCustomResizeHandle(mediaContainer); 
+                        addStarMenu(mediaContainer); 
+                        makeDraggable(mediaContainer); 
+                        board.appendChild(mediaContainer);
+                        undoStack.push({ type: 'dom', element: mediaContainer }); 
+                        redoStack = [];
+                        selectElement(mediaContainer);
+                        if (typeof setMode === 'function') setMode('pan');
+                        if (window.sendAddElement) window.sendAddElement(mediaContainer);
+                    };
                 } else if (isImage) {
                     const img = document.createElement('img'); 
-                    img.src = event.target.result; 
+                    img.src = mediaUrl;
                     img.draggable = false;
                     img.ondragstart = (e) => e.preventDefault();
                     mediaContainer.appendChild(img); 
@@ -2301,10 +2339,13 @@
                         selectElement(mediaContainer); 
                         if (typeof setMode === 'function') setMode('pan');
                         if (window.sendAddElement) window.sendAddElement(mediaContainer);
-                    }; 
+                    };
                 }
-            }; 
-            reader.readAsDataURL(file); 
+            } catch (err) {
+                toast.textContent = '❌ Bağlantı hatası: ' + err.message;
+                toast.style.color = '#f87171';
+                setTimeout(() => toast.remove(), 4000);
+            }
         }
         const renderImageOnBoard = renderMediaOnBoard;
         
