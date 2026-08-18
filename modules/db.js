@@ -37,9 +37,7 @@ if (!isCloudflare && typeof process !== 'undefined' && process.versions?.node) {
     });
   } else {
     const baseDir = typeof __dirname !== 'undefined' ? __dirname : (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.');
-    const defaultPath = process.env.NODE_ENV === 'production'
-      ? path.join(baseDir, '..', 'data', 'sqlite.db')
-      : path.join(baseDir, '..', 'sqlite.db');
+    const defaultPath = path.join(baseDir, '..', 'data', 'sqlite.db');
 
     let dbPath = process.env.DB_PATH || defaultPath;
 
