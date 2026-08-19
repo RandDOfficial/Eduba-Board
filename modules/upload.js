@@ -1,5 +1,9 @@
 const { Hono } = require('hono');
 const { requireUser } = require('./auth');
+const db = require('./db');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 const upload = new Hono();
 upload.use('*', requireUser);
@@ -17,16 +21,100 @@ const ALLOWED_TYPES = {
 
 const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 
+function getUploadsDir() {
+  return path.resolve(
+    process.env.UPLOADS_DIR ||
+    path.join(__dirname, '..', 'data', 'uploads')
+  );
+}
+
+/**
+ * Extracts all filenames referenced via /uploads/<filename> from a board state or raw buffer
+ */
+function extractUploadFilenames(data) {
+  if (!data) return new Set();
+  const raw = typeof data === 'string'
+    ? data
+    : (data instanceof Uint8Array || ArrayBuffer.isView(data) || Buffer.isBuffer(data))
+      ? Buffer.from(data).toString('utf8')
+      : String(data);
+  const filenames = new Set();
+  const matches = raw.matchAll(/\/uploads\/([^"'\s\\?#]+)/g);
+  for (const m of matches) {
+    if (m[1]) filenames.add(m[1]);
+  }
+  return filenames;
+}
+
+/**
+ * Server-side automatic cleanup:
+ * Compares old state vs new state of a board. Any files removed from this board
+ * are checked across all other boards. If not referenced anywhere, they are deleted from disk.
+ */
+async function cleanupRemovedUploads(oldData, newData, currentProjectId) {
+  const isNode = typeof process !== 'undefined' && process.versions?.node;
+  if (!isNode) return;
+
+  const oldFiles = extractUploadFilenames(oldData);
+  if (oldFiles.size === 0) return;
+
+  const newFiles = extractUploadFilenames(newData);
+  const removedFiles = [];
+  for (const file of oldFiles) {
+    if (!newFiles.has(file)) {
+      removedFiles.push(file);
+    }
+  }
+
+  if (removedFiles.length === 0) return;
+
+  const uploadsDir = getUploadsDir();
+
+  // Query other boards to see if removed files are still used elsewhere
+  let query = 'SELECT doc_data FROM board_docs';
+  const params = [];
+  if (currentProjectId) {
+    query += ' WHERE project_id != $1';
+    params.push(currentProjectId);
+  }
+
+  try {
+    const otherDocs = await db.query(query, params);
+    const otherFiles = new Set();
+    for (const row of otherDocs.rows || []) {
+      const fSet = extractUploadFilenames(row.doc_data);
+      for (const f of fSet) otherFiles.add(f);
+    }
+    // Also include files currently in new state
+    for (const f of newFiles) otherFiles.add(f);
+
+    for (const filename of removedFiles) {
+      if (!otherFiles.has(filename)) {
+        if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) continue;
+        const filepath = path.join(uploadsDir, filename);
+        if (fs.existsSync(filepath)) {
+          try {
+            fs.unlinkSync(filepath);
+            console.info(`[upload] Auto-deleted unreferenced file: ${filename}`);
+          } catch (err) {
+            console.warn(`[upload] Failed to delete file ${filename}:`, err.message);
+          }
+        }
+      } else {
+        console.info(`[upload] File ${filename} still referenced in another project, preserving.`);
+      }
+    }
+  } catch (err) {
+    console.error('[upload] Error during automatic cleanup:', err);
+  }
+}
+
+// POST /api/upload
 upload.post('/', async (c) => {
-  // Only available in Node environment (not Cloudflare Workers)
   const isNode = typeof process !== 'undefined' && process.versions?.node;
   if (!isNode) {
     return c.json({ error: 'Dosya yükleme yalnızca kendi sunucunuzda desteklenmektedir.' }, 501);
   }
-
-  const fs = require('fs');
-  const path = require('path');
-  const crypto = require('crypto');
 
   try {
     const formData = await c.req.formData();
@@ -49,14 +137,7 @@ upload.post('/', async (c) => {
       return c.json({ error: `Dosya çok büyük. Maksimum boyut: ${MAX_SIZE_BYTES / 1024 / 1024} MB` }, 413);
     }
 
-    // Resolve uploads directory:
-    // - Docker/production: /app/data/uploads (inside volume)
-    // - Local dev: ./data/uploads
-    const uploadsDir = path.resolve(
-      process.env.UPLOADS_DIR ||
-      path.join(__dirname, '..', 'data', 'uploads')
-    );
-
+    const uploadsDir = getUploadsDir();
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
@@ -75,64 +156,9 @@ upload.post('/', async (c) => {
   }
 });
 
-// DELETE /api/upload?url=/uploads/xxx.mp4
-// Deletes the file only if it's not referenced in any board_docs
-upload.delete('/', async (c) => {
-  const isNode = typeof process !== 'undefined' && process.versions?.node;
-  if (!isNode) return c.json({ deleted: false });
-
-  const fs = require('fs');
-  const path = require('path');
-  const db = require('./db');
-
-  try {
-    const fileUrl = c.req.query('url'); // e.g. /uploads/abc.mp4
-    if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
-      return c.json({ error: 'Geçersiz URL.' }, 400);
-    }
-
-    const filename = path.basename(fileUrl);
-    // Safety: prevent path traversal
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return c.json({ error: 'Geçersiz dosya adı.' }, 400);
-    }
-
-    // Check if this URL is still referenced in any board_docs
-    const allDocs = await db.query('SELECT doc_data FROM board_docs');
-    const isReferenced = (allDocs.rows || []).some(row => {
-      try {
-        const raw = Buffer.isBuffer(row.doc_data)
-          ? row.doc_data.toString('utf8')
-          : (row.doc_data instanceof Uint8Array || ArrayBuffer.isView(row.doc_data))
-            ? Buffer.from(row.doc_data).toString('utf8')
-            : String(row.doc_data);
-        // Check for both /uploads/filename and uploads/filename (handles JSON escaping)
-        return raw.includes(`/uploads/${filename}`);
-      } catch { return false; }
-    });
-
-    if (isReferenced) {
-      console.info(`[upload] File still referenced, not deleting: ${filename}`);
-      return c.json({ deleted: false, reason: 'still_referenced' });
-    }
-
-    const uploadsDir = path.resolve(
-      process.env.UPLOADS_DIR ||
-      path.join(__dirname, '..', 'data', 'uploads')
-    );
-    const filepath = path.join(uploadsDir, filename);
-
-    if (fs.existsSync(filepath)) {
-      fs.unlinkSync(filepath);
-      console.info(`[upload] Deleted orphan file: ${filename}`);
-      return c.json({ deleted: true });
-    }
-
-    return c.json({ deleted: false, reason: 'not_found' });
-  } catch (err) {
-    console.error('[upload] Delete error:', err);
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-module.exports = { upload };
+module.exports = {
+  upload,
+  extractUploadFilenames,
+  cleanupRemovedUploads,
+  getUploadsDir
+};

@@ -1,5 +1,6 @@
 const { WebSocketServer } = require('ws');
 const db = require('./db');
+const { cleanupRemovedUploads } = require('./upload');
 const Y = require('yjs');
 const syncProtocol = require('y-protocols/sync');
 const awarenessProtocol = require('y-protocols/awareness');
@@ -61,6 +62,16 @@ async function saveRoom(room) {
   }
 
   if (!data) return;
+
+  try {
+    const { rows } = await db.query('SELECT doc_data FROM board_docs WHERE project_id = $1', [room]);
+    const oldData = rows[0]?.doc_data;
+    if (oldData) {
+      await cleanupRemovedUploads(oldData, data, room);
+    }
+  } catch (e) {
+    console.warn(`[board:${room}] upload cleanup check failed`, e);
+  }
 
   await db.query(
     'INSERT INTO board_docs (project_id, doc_data, updated) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (project_id) DO UPDATE SET doc_data = EXCLUDED.doc_data, updated = CURRENT_TIMESTAMP',

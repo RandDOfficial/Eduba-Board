@@ -3,51 +3,58 @@
  * Deletes all files in data/uploads that are not referenced in any board_docs.
  * Run: node cleanup_uploads.js
  */
-const { DatabaseSync } = require('node:sqlite');
 const fs = require('fs');
 const path = require('path');
+const { extractUploadFilenames, getUploadsDir } = require('./modules/upload');
+const db = require('./modules/db');
 
-const DB_PATH    = process.env.DB_PATH    || path.join(__dirname, 'data', 'sqlite.db');
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, 'data', 'uploads');
+async function runCleanup() {
+  const uploadsDir = getUploadsDir();
 
-if (!fs.existsSync(UPLOADS_DIR)) {
-  console.log('Uploads directory not found:', UPLOADS_DIR);
+  if (!fs.existsSync(uploadsDir)) {
+    console.log('Uploads directory not found:', uploadsDir);
+    process.exit(0);
+  }
+
+  const { rows } = await db.query('SELECT doc_data FROM board_docs');
+
+  // Build a set of all /uploads/ filenames referenced in any board state
+  const referenced = new Set();
+  for (const row of rows || []) {
+    const fSet = extractUploadFilenames(row.doc_data);
+    for (const f of fSet) referenced.add(f);
+  }
+
+  console.log(`Referenced files in DB: ${referenced.size}`);
+  if (referenced.size > 0) {
+    console.log([...referenced].map(f => '  ' + f).join('\n'));
+  }
+
+  const files = fs.readdirSync(uploadsDir);
+  console.log(`\nTotal files on disk: ${files.length}`);
+
+  let deleted = 0;
+  let kept = 0;
+  for (const file of files) {
+    if (referenced.has(file)) {
+      console.log(`  ✅ Keep: ${file}`);
+      kept++;
+    } else {
+      try {
+        fs.unlinkSync(path.join(uploadsDir, file));
+        console.log(`  🗑️  Deleted orphan: ${file}`);
+        deleted++;
+      } catch (e) {
+        console.warn(`  ⚠️  Failed to delete ${file}:`, e.message);
+      }
+    }
+  }
+
+  console.log(`\nDone! Deleted: ${deleted}, Kept: ${kept}`);
   process.exit(0);
 }
 
-const db = new DatabaseSync(DB_PATH);
-const rows = db.prepare('SELECT doc_data FROM board_docs').all();
-
-// Build a set of all /uploads/ filenames referenced in any board state
-const referenced = new Set();
-for (const row of rows) {
-  try {
-    const raw = Buffer.from(row.doc_data).toString('utf8');
-    // Exclude backslash too — JSON stores HTML attrs as \"...\" so after filename comes \"
-    const matches = raw.matchAll(/\/uploads\/([^"'\s\\]+)/g);
-    for (const m of matches) referenced.add(m[1]);
-  } catch {}
-}
-
-console.log(`Referenced files in DB: ${referenced.size}`);
-if (referenced.size > 0) {
-  console.log([...referenced].map(f => '  ' + f).join('\n'));
-}
-
-const files = fs.readdirSync(UPLOADS_DIR);
-console.log(`\nTotal files in uploads: ${files.length}`);
-
-let deleted = 0;
-let kept = 0;
-for (const file of files) {
-  if (referenced.has(file)) {
-    console.log(`  ✅ Keep: ${file}`);
-    kept++;
-  } else {
-    fs.unlinkSync(path.join(UPLOADS_DIR, file));
-    console.log(`  🗑️  Deleted orphan: ${file}`);
-    deleted++;
-  }
-}
-
-console.log(`\nDone! Deleted: ${deleted}, Kept: ${kept}`);
+runCleanup().catch(err => {
+  console.error('Cleanup error:', err);
+  process.exit(1);
+});

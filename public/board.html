@@ -2261,10 +2261,7 @@
 
                 const mediaContainer = document.createElement('div'); 
                 mediaContainer.id = generateId();
-                mediaContainer.className = 'media-item';
-                // Register URL so any delete path can clean up the file
-                window._mediaUrlRegistry = window._mediaUrlRegistry || {};
-                window._mediaUrlRegistry[mediaContainer.id] = mediaUrl;
+                mediaContainer.className = 'media-item'; 
                 
                 if (isVideo) {
                     const video = document.createElement('video'); 
@@ -3069,16 +3066,6 @@
         };
 
         window.sendDeleteElement = function(id) {
-            // Read media URL from registry (populated when element was added/loaded)
-            const mediaPath = (window._mediaUrlRegistry || {})[id];
-            if (mediaPath) {
-                delete window._mediaUrlRegistry[id];
-                // Wait 3s for board state to be saved to DB, then request file cleanup
-                setTimeout(() => {
-                    fetch(`/api/upload?url=${encodeURIComponent(mediaPath)}`, { method: 'DELETE' })
-                        .catch(() => {}); // fire & forget
-                }, 3000);
-            }
             sendOp({ op: 'delete_element', id });
         };
 
@@ -3223,14 +3210,6 @@
                     applyEditableBlur(el.querySelector('.frame-title'));
                 } else {
                     applyEditableBlur(el);
-                }
-                // Populate media registry for existing media elements on load
-                if (el.classList.contains('media-item')) {
-                    const mediaSrc = el.querySelector('video')?.getAttribute('src') || el.querySelector('img')?.getAttribute('src') || '';
-                    if (mediaSrc.startsWith('/uploads/')) {
-                        window._mediaUrlRegistry = window._mediaUrlRegistry || {};
-                        window._mediaUrlRegistry[el.id] = mediaSrc;
-                    }
                 }
             });
 

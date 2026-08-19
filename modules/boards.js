@@ -1,6 +1,7 @@
 const { Hono } = require('hono');
 const db = require('./db');
 const { requireUser } = require('./auth');
+const { cleanupRemovedUploads } = require('./upload');
 
 const boards = new Hono();
 
@@ -100,6 +101,16 @@ boards.delete('/projects/:id', async (c) => {
     if (proj.owner_id !== user.id) {
       return c.json({ error: 'Bu projeyi silme yetkiniz yok.' }, 403);
     }
+  }
+
+  // Read board doc to clean up any orphaned uploaded media
+  try {
+    const docRes = await db.query('SELECT doc_data FROM board_docs WHERE project_id = $1', [projectId]);
+    if (docRes.rows[0]?.doc_data) {
+      await cleanupRemovedUploads(docRes.rows[0].doc_data, '', projectId);
+    }
+  } catch (e) {
+    console.warn('[boards] delete upload cleanup failed', e);
   }
 
   await db.query('DELETE FROM projects WHERE id = $1', [projectId]);
