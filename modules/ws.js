@@ -87,7 +87,7 @@ function scheduleSave(room) {
   clearTimeout(roomData.saveTimer);
   roomData.saveTimer = setTimeout(
     () => saveRoom(room).catch(e => console.error(`[board:${room}] save failed`, e)),
-    2000
+    800
   );
 }
 
