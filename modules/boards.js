@@ -341,14 +341,14 @@ boards.post('/groups/:groupId/leave', async (c) => {
 
   if (isCreator) {
     const otherAdmins = await db.query(
-      "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 AND role = 'owner' ORDER BY created ASC LIMIT 1",
+      "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 AND role = 'owner' LIMIT 1",
       [groupId, userId]
     );
     let nextOwnerId = otherAdmins.rows[0] ? otherAdmins.rows[0].user_id : null;
 
     if (!nextOwnerId) {
       const anyOtherMember = await db.query(
-        "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 ORDER BY created ASC LIMIT 1",
+        "SELECT user_id FROM group_members WHERE group_id = $1 AND user_id != $2 LIMIT 1",
         [groupId, userId]
       );
       if (anyOtherMember.rows[0]) nextOwnerId = anyOtherMember.rows[0].user_id;
@@ -361,6 +361,12 @@ boards.post('/groups/:groupId/leave', async (c) => {
     } else {
       const groupProjects = await db.query('SELECT id FROM projects WHERE group_id = $1', [groupId]);
       for (let p of groupProjects.rows) {
+        try {
+          const docRes = await db.query('SELECT doc_data FROM board_docs WHERE project_id = $1', [p.id]);
+          if (docRes.rows[0]?.doc_data) {
+            await cleanupRemovedUploads(docRes.rows[0].doc_data, '', p.id);
+          }
+        } catch (e) {}
         await db.query('DELETE FROM board_docs WHERE project_id = $1', [p.id]);
       }
       await db.query('DELETE FROM projects WHERE group_id = $1', [groupId]);
