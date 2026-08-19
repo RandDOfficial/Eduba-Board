@@ -790,6 +790,17 @@
                         });
 
                         if(el._connectionObj) window.connections = (window.connections || []).filter(c => c !== el._connectionObj);
+                        // Cache media URL before removing from DOM
+                        if (el.classList.contains('media-item')) {
+                            const mediaSrc = el.querySelector('video')?.src || el.querySelector('img')?.src || '';
+                            try {
+                                const u = new URL(mediaSrc);
+                                if (u.pathname.startsWith('/uploads/')) {
+                                    window._pendingMediaDelete = window._pendingMediaDelete || {};
+                                    window._pendingMediaDelete[el.id] = u.pathname;
+                                }
+                            } catch(e) {}
+                        }
                         el.remove();
                         window.connections = (window.connections || []).filter(conn => conn.source !== el && conn.target !== el);
                     });
@@ -3066,17 +3077,15 @@
         };
 
         window.sendDeleteElement = function(id) {
-            // If deleting a media element with a /uploads/ file, try to clean it up
-            const el = document.getElementById(id);
-            if (el && el.classList.contains('media-item')) {
-                const mediaSrc = el.querySelector('video')?.src || el.querySelector('img')?.src || '';
-                try {
-                    const url = new URL(mediaSrc);
-                    if (url.pathname.startsWith('/uploads/')) {
-                        fetch(`/api/upload?url=${encodeURIComponent(url.pathname)}`, { method: 'DELETE' })
-                            .catch(() => {}); // fire & forget, non-blocking
-                    }
-                } catch (e) {}
+            // Read media URL from pre-removal cache (el already removed from DOM)
+            const mediaPath = (window._pendingMediaDelete || {})[id];
+            if (mediaPath) {
+                delete window._pendingMediaDelete[id];
+                // Wait 3s for board state to be saved to DB, then request cleanup
+                setTimeout(() => {
+                    fetch(`/api/upload?url=${encodeURIComponent(mediaPath)}`, { method: 'DELETE' })
+                        .catch(() => {}); // fire & forget
+                }, 3000);
             }
             sendOp({ op: 'delete_element', id });
         };
