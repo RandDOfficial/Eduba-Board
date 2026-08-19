@@ -2230,13 +2230,6 @@
             });
         }
 
-        async function renderMediaOnBoard(file, x, y) { 
-            if (!file) return;
-            const isImage = file.type.startsWith('image/');
-            const isVideo = file.type.startsWith('video/');
-            if (!isImage && !isVideo) return;
-
-            // Show a loading indicator while uploading
         function attachMediaElementToBoard(mediaUrl, isVideo, isImage, x, y) {
             const mediaContainer = document.createElement('div'); 
             mediaContainer.id = generateId();
