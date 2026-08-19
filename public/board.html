@@ -3066,6 +3066,18 @@
         };
 
         window.sendDeleteElement = function(id) {
+            // If deleting a media element with a /uploads/ file, try to clean it up
+            const el = document.getElementById(id);
+            if (el && el.classList.contains('media-item')) {
+                const mediaSrc = el.querySelector('video')?.src || el.querySelector('img')?.src || '';
+                try {
+                    const url = new URL(mediaSrc);
+                    if (url.pathname.startsWith('/uploads/')) {
+                        fetch(`/api/upload?url=${encodeURIComponent(url.pathname)}`, { method: 'DELETE' })
+                            .catch(() => {}); // fire & forget, non-blocking
+                    }
+                } catch (e) {}
+            }
             sendOp({ op: 'delete_element', id });
         };
 

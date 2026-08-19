@@ -75,4 +75,63 @@ upload.post('/', async (c) => {
   }
 });
 
+// DELETE /api/upload?url=/uploads/xxx.mp4
+// Deletes the file only if it's not referenced in any board_docs
+upload.delete('/', async (c) => {
+  const isNode = typeof process !== 'undefined' && process.versions?.node;
+  if (!isNode) return c.json({ deleted: false });
+
+  const fs = require('fs');
+  const path = require('path');
+  const db = require('./db');
+
+  try {
+    const fileUrl = c.req.query('url'); // e.g. /uploads/abc.mp4
+    if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
+      return c.json({ error: 'Geçersiz URL.' }, 400);
+    }
+
+    const filename = path.basename(fileUrl);
+    // Safety: prevent path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return c.json({ error: 'Geçersiz dosya adı.' }, 400);
+    }
+
+    // Check if this URL is still referenced in any board_docs
+    const allDocs = await db.query('SELECT doc_data FROM board_docs');
+    const isReferenced = (allDocs.rows || []).some(row => {
+      try {
+        const raw = Buffer.isBuffer(row.doc_data)
+          ? row.doc_data.toString('utf8')
+          : (row.doc_data instanceof Uint8Array || ArrayBuffer.isView(row.doc_data))
+            ? Buffer.from(row.doc_data).toString('utf8')
+            : String(row.doc_data);
+        return raw.includes(fileUrl);
+      } catch { return false; }
+    });
+
+    if (isReferenced) {
+      console.info(`[upload] File still referenced, not deleting: ${filename}`);
+      return c.json({ deleted: false, reason: 'still_referenced' });
+    }
+
+    const uploadsDir = path.resolve(
+      process.env.UPLOADS_DIR ||
+      path.join(__dirname, '..', 'data', 'uploads')
+    );
+    const filepath = path.join(uploadsDir, filename);
+
+    if (fs.existsSync(filepath)) {
+      fs.unlinkSync(filepath);
+      console.info(`[upload] Deleted orphan file: ${filename}`);
+      return c.json({ deleted: true });
+    }
+
+    return c.json({ deleted: false, reason: 'not_found' });
+  } catch (err) {
+    console.error('[upload] Delete error:', err);
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 module.exports = { upload };
