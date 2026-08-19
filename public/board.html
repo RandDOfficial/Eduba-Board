@@ -790,17 +790,6 @@
                         });
 
                         if(el._connectionObj) window.connections = (window.connections || []).filter(c => c !== el._connectionObj);
-                        // Cache media URL before removing from DOM
-                        if (el.classList.contains('media-item')) {
-                            const mediaSrc = el.querySelector('video')?.src || el.querySelector('img')?.src || '';
-                            try {
-                                const u = new URL(mediaSrc);
-                                if (u.pathname.startsWith('/uploads/')) {
-                                    window._pendingMediaDelete = window._pendingMediaDelete || {};
-                                    window._pendingMediaDelete[el.id] = u.pathname;
-                                }
-                            } catch(e) {}
-                        }
                         el.remove();
                         window.connections = (window.connections || []).filter(conn => conn.source !== el && conn.target !== el);
                     });
@@ -2272,7 +2261,10 @@
 
                 const mediaContainer = document.createElement('div'); 
                 mediaContainer.id = generateId();
-                mediaContainer.className = 'media-item'; 
+                mediaContainer.className = 'media-item';
+                // Register URL so any delete path can clean up the file
+                window._mediaUrlRegistry = window._mediaUrlRegistry || {};
+                window._mediaUrlRegistry[mediaContainer.id] = mediaUrl;
                 
                 if (isVideo) {
                     const video = document.createElement('video'); 
@@ -3077,11 +3069,11 @@
         };
 
         window.sendDeleteElement = function(id) {
-            // Read media URL from pre-removal cache (el already removed from DOM)
-            const mediaPath = (window._pendingMediaDelete || {})[id];
+            // Read media URL from registry (populated when element was added/loaded)
+            const mediaPath = (window._mediaUrlRegistry || {})[id];
             if (mediaPath) {
-                delete window._pendingMediaDelete[id];
-                // Wait 3s for board state to be saved to DB, then request cleanup
+                delete window._mediaUrlRegistry[id];
+                // Wait 3s for board state to be saved to DB, then request file cleanup
                 setTimeout(() => {
                     fetch(`/api/upload?url=${encodeURIComponent(mediaPath)}`, { method: 'DELETE' })
                         .catch(() => {}); // fire & forget
@@ -3231,6 +3223,14 @@
                     applyEditableBlur(el.querySelector('.frame-title'));
                 } else {
                     applyEditableBlur(el);
+                }
+                // Populate media registry for existing media elements on load
+                if (el.classList.contains('media-item')) {
+                    const mediaSrc = el.querySelector('video')?.getAttribute('src') || el.querySelector('img')?.getAttribute('src') || '';
+                    if (mediaSrc.startsWith('/uploads/')) {
+                        window._mediaUrlRegistry = window._mediaUrlRegistry || {};
+                        window._mediaUrlRegistry[el.id] = mediaSrc;
+                    }
                 }
             });
 
