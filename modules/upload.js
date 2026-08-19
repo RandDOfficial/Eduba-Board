@@ -8,6 +8,9 @@ const crypto = require('crypto');
 const upload = new Hono();
 upload.use('*', requireUser);
 
+const isCloudflare = typeof WebSocketPair !== 'undefined' || (typeof navigator !== 'undefined' && navigator.userAgent?.includes('Cloudflare-Workers'));
+const isNode = !isCloudflare && typeof process !== 'undefined' && process.versions?.node;
+
 const ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -52,8 +55,7 @@ function extractUploadFilenames(data) {
  * are checked across all other boards. If not referenced anywhere, they are deleted from disk.
  */
 async function cleanupRemovedUploads(oldData, newData, currentProjectId) {
-  const isNode = typeof process !== 'undefined' && process.versions?.node;
-  if (!isNode) return;
+  if (isCloudflare || !isNode) return;
 
   const oldFiles = extractUploadFilenames(oldData);
   if (oldFiles.size === 0) return;
@@ -111,9 +113,8 @@ async function cleanupRemovedUploads(oldData, newData, currentProjectId) {
 
 // POST /api/upload
 upload.post('/', async (c) => {
-  const isNode = typeof process !== 'undefined' && process.versions?.node;
-  if (!isNode) {
-    return c.json({ error: 'Dosya yükleme yalnızca kendi sunucunuzda desteklenmektedir.' }, 501);
+  if (isCloudflare || !isNode) {
+    return c.json({ supported: false, message: 'Cloudflare ortamında dosyalar veritabanında saklanır.' }, 200);
   }
 
   try {
