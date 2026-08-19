@@ -106,7 +106,8 @@ upload.delete('/', async (c) => {
           : (row.doc_data instanceof Uint8Array || ArrayBuffer.isView(row.doc_data))
             ? Buffer.from(row.doc_data).toString('utf8')
             : String(row.doc_data);
-        return raw.includes(fileUrl);
+        // Check for both /uploads/filename and uploads/filename (handles JSON escaping)
+        return raw.includes(`/uploads/${filename}`);
       } catch { return false; }
     });
 
